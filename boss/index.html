@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Studio MV · Painel</title>
+<link rel="icon" href="../logo.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ===== Entrada ===== -->
+<section id="screen-login" class="auth" hidden>
+  <div class="auth-card">
+    <img src="../logo.png" alt="Studio MV" class="auth-logo">
+    <h1>Entrar no painel</h1>
+    <form id="login-form" novalidate>
+      <div class="field"><label for="login-email">E-mail</label><input id="login-email" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="login-pass">Senha</label><input id="login-pass" type="password" autocomplete="current-password" required></div>
+      <button class="btn-primary block" type="submit">Entrar</button>
+    </form>
+    <p class="auth-links"><a href="#" id="show-forgot">Esqueci minha senha</a></p>
+    <div id="login-msg" class="notice" hidden></div>
+  </div>
+</section>
+
+<!-- ===== Recuperação de senha ===== -->
+<section id="screen-forgot" class="auth" hidden>
+  <div class="auth-card">
+    <img src="../logo.png" alt="Studio MV" class="auth-logo">
+    <h1>Recuperar senha</h1>
+    <p class="muted">Informe o e-mail de administrador. Se ele estiver cadastrado, você receberá um link para criar uma nova senha.</p>
+    <form id="forgot-form" novalidate>
+      <div class="field"><label for="forgot-email">E-mail</label><input id="forgot-email" type="email" autocomplete="username" required></div>
+      <button class="btn-primary block" type="submit">Enviar link</button>
+    </form>
+    <p class="auth-links"><a href="#" id="back-login">Voltar ao login</a></p>
+    <div id="forgot-msg" class="notice" hidden></div>
+  </div>
+</section>
+
+<!-- ===== Nova senha (aberto pelo link do e-mail) ===== -->
+<section id="screen-reset" class="auth" hidden>
+  <div class="auth-card">
+    <img src="../logo.png" alt="Studio MV" class="auth-logo">
+    <h1>Criar nova senha</h1>
+    <form id="reset-form" novalidate>
+      <div class="field"><label for="reset-pass">Nova senha</label><input id="reset-pass" type="password" autocomplete="new-password" minlength="10" required><small class="hint">Use pelo menos 10 caracteres.</small></div>
+      <div class="field"><label for="reset-pass2">Repita a nova senha</label><input id="reset-pass2" type="password" autocomplete="new-password" minlength="10" required></div>
+      <button class="btn-primary block" type="submit">Salvar nova senha</button>
+    </form>
+    <div id="reset-msg" class="notice" hidden></div>
+  </div>
+</section>
+
+<!-- ===== Painel ===== -->
+<div id="screen-app" class="app" hidden>
+  <aside class="sidebar">
+    <a href="#/visao-geral" class="brand"><img src="../logo.png" alt="Studio MV"></a>
+    <nav class="nav" aria-label="Áreas do painel">
+      <a href="#/visao-geral" data-nav="visao-geral">Visão geral</a>
+      <a href="#/projetos" data-nav="projetos">Projetos</a>
+      <a href="#/fila" data-nav="fila">Fila de espera</a>
+      <a href="#/clientes" data-nav="clientes">Clientes</a>
+      <a href="#/contratos" data-nav="contratos">Contratos</a>
+      <a href="#/financeiro" data-nav="financeiro">Financeiro</a>
+      <a href="#/mensagens" data-nav="mensagens">Mensagens</a>
+      <a href="#/portfolio" data-nav="portfolio">Portfólio</a>
+      <a href="#/configuracoes" data-nav="configuracoes">Configurações</a>
+    </nav>
+    <div class="sidebar-foot">
+      <span id="user-email" class="muted small"></span>
+      <button id="logout" class="ghost sm" type="button">Sair</button>
+    </div>
+  </aside>
+  <main id="main" class="main"></main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
