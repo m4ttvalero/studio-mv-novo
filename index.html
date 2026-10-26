@@ -1045,14 +1045,14 @@
               ><span class="error" data-for="desc"></span>
             </div>
             <div class="field full">
-              <label for="budget"
-                >Orçamento disponível
-                <span style="color: var(--muted)">(opcional)</span></label
-              ><input
-                id="budget"
-                name="budget"
-                placeholder="Ex.: R$ 1.500 a R$ 3.000"
-              />
+              <label for="budget">Faixa de investimento (opcional)</label>
+              <select id="budget" name="budget">
+                <option value="" selected>Selecione (opcional)</option>
+                <option value="Entre R$ 1.500 e R$ 3.000">Entre R$ 1.500 e R$ 3.000</option>
+                <option value="Entre R$ 3.000 e R$ 6.000">Entre R$ 3.000 e R$ 6.000</option>
+                <option value="Acima de R$ 6.000">Acima de R$ 6.000</option>
+                <option value="Ainda não sei / prefiro conversar">Ainda não sei / prefiro conversar</option>
+              </select>
             </div>
             <div class="actions-row">
               <span class="hint">Campos com * são obrigatórios.</span>
