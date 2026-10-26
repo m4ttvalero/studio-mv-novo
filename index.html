@@ -644,9 +644,134 @@
           transform: none;
         }
       }
+
+      /* ===== Animações e interatividade sutis ===== */
+      :root {
+        --cursor-size: 20px;
+        --cursor-grow: 40px;
+      }
+
+      /* Barra de progresso de rolagem (topo) */
+      .progress-bar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 0%;
+        height: 3px;
+        background: linear-gradient(90deg, var(--blue-2), var(--blue));
+        transform-origin: left;
+        transform: scaleX(0);
+        z-index: 60;
+        transition: transform 0.1s ease;
+        pointer-events: none;
+      }
+
+      /* Cursor personalizado */
+      .cursor {
+        position: fixed;
+        width: var(--cursor-size);
+        height: var(--cursor-size);
+        background: var(--blue);
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 10000;
+        mix-blend-mode: screen;
+        transform: translate(-50%, -50%);
+        transition: width 0.22s ease, height 0.22s ease, background 0.22s ease;
+        opacity: 0;
+      }
+      .cursor.visible { opacity: 1; }
+      .cursor.grow {
+        width: var(--cursor-grow);
+        height: var(--cursor-grow);
+        background: rgba(31, 107, 255, 0.25);
+        border: 2px solid var(--blue);
+      }
+
+      /* Hover nos botões: brilho que passa + elevação */
+      .btn {
+        position: relative;
+        overflow: hidden;
+      }
+      .btn::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        );
+        transform: skewX(-25deg);
+      }
+      .btn:hover::after {
+        left: 100%;
+        transition: left 0.7s ease;
+      }
+      .btn-primary:hover {
+        box-shadow: 0 0 30px var(--glow);
+      }
+
+      /* Cards de serviço: inclinação 3D sutil */
+      .service {
+        position: relative;
+        transform-style: preserve-3d;
+        transition: transform 0.15s ease-out;
+      }
+
+      /* Brilho que acompanha o mouse no card */
+      .service-glow {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(
+          circle at var(--gx, 50%) var(--gy, 50%),
+          rgba(31, 107, 255, 0.12),
+          transparent 45%
+        );
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+      .service:hover .service-glow { opacity: 1; }
+
+      /* Variação de direção da entrada das seções */
+      .reveal-left { transform: translateX(-22px); }
+      .reveal-right { transform: translateX(22px); }
+
+      /* Linha de progresso da seção processo */
+      .process-line {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 2px;
+        height: 0%;
+        background: var(--blue);
+        transform: translateX(-50%);
+        z-index: 0;
+        transition: height 0.7s ease;
+      }
+
+      /* prefers-reduced-motion: desativa movimento, mantém cores */
+      @media (prefers-reduced-motion: reduce) {
+        .cursor { display: none !important; }
+        .cursor.grow { width: var(--cursor-size) !important; height: var(--cursor-size) !important; }
+        .btn::after { display: none !important; }
+        .service { transition: none !important; transform: none !important; }
+        .service-glow { display: none !important; }
+        .process-line { transition: none !important; }
+        .reveal-left, .reveal-right { transform: none !important; }
+      }
     </style>
   </head>
   <body>
+    <div class="progress-bar" aria-hidden="true"></div>
     <header id="top">
       <div class="wrap nav">
         <a href="#inicio" class="brand" aria-label="Studio MV — início"
@@ -766,6 +891,7 @@
         <div class="wrap">
           <span class="eyebrow reveal">Como funciona</span>
           <h2 class="reveal">Do primeiro contato à publicação</h2>
+          <div class="process-line" aria-hidden="true"></div>
           <ol class="steps">
             <li class="reveal">
               <span class="n">01</span>
@@ -919,14 +1045,14 @@
               ><span class="error" data-for="desc"></span>
             </div>
             <div class="field full">
-              <label for="budget"
-                >Orçamento disponível
-                <span style="color: var(--muted)">(opcional)</span></label
-              ><input
-                id="budget"
-                name="budget"
-                placeholder="Ex.: R$ 1.500 a R$ 3.000"
-              />
+              <label for="budget">Faixa de investimento (opcional)</label>
+              <select id="budget" name="budget">
+                <option value="" selected>Selecione (opcional)</option>
+                <option>Entre R$ 1.500 e R$ 3.000</option>
+                <option>Entre R$ 3.000 e R$ 6.000</option>
+                <option>Acima de R$ 6.000</option>
+                <option>Ainda não sei / prefiro conversar</option>
+              </select>
             </div>
             <div class="actions-row">
               <span class="hint">Campos com * são obrigatórios.</span>
@@ -1195,6 +1321,128 @@
             btn.disabled = false;
             btn.textContent = "Enviar solicitação";
           }
+        });
+      })();
+    </script>
+
+    <div class="cursor" aria-hidden="true"></div>
+
+    <script>
+      (function () {
+        const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const hasFinePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
+        if (prefersReduced.matches) return;
+        const cursor = document.createElement('div');
+        cursor.className = 'cursor';
+        cursor.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(cursor);
+        const moveCursor = (e) => {
+          if (!hasFinePointer.matches) return;
+          cursor.style.left = e.clientX + 'px';
+          cursor.style.top = e.clientY + 'px';
+        };
+        const showCursor = () => { if (hasFinePointer.matches) cursor.classList.add('visible'); };
+        const hideCursor = () => { cursor.classList.remove('visible', 'grow'); };
+        const growCursor = () => { if (hasFinePointer.matches) cursor.classList.add('grow'); };
+        const shrinkCursor = () => { cursor.classList.remove('grow'); };
+        document.addEventListener('mousemove', moveCursor, { passive: true });
+        document.addEventListener('mouseenter', showCursor, { passive: true });
+        document.addEventListener('mouseleave', hideCursor, { passive: true });
+        const interactives = document.querySelectorAll('a, button, input, select, textarea');
+        interactives.forEach((el) => {
+          el.addEventListener('mouseenter', growCursor, { passive: true });
+          el.addEventListener('mouseleave', shrinkCursor, { passive: true });
+        });
+        const textFields = document.querySelectorAll('input, select, textarea');
+        textFields.forEach((el) => {
+          el.addEventListener('mouseenter', shrinkCursor, { passive: true });
+          el.addEventListener('mouseleave', growCursor, { passive: true });
+        });
+        const bar = document.querySelector('.progress-bar');
+        const updateProgress = () => {
+          const winScroll = document.documentElement.scrollTop || document.body.scrollTop;
+          const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+          const scrolled = height ? (winScroll / height) * 100 : 0;
+          bar.style.transform = 'scaleX(' + scrolled / 100 + ')';
+        };
+        document.addEventListener('scroll', updateProgress, { passive: true });
+        updateProgress();
+        const services = document.querySelectorAll('.service');
+        services.forEach((service) => {
+          const glow = document.createElement('div');
+          glow.className = 'service-glow';
+          glow.setAttribute('aria-hidden', 'true');
+          service.style.position = 'relative';
+          service.insertBefore(glow, service.firstChild);
+          const handleMove = (e) => {
+            const rect = service.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const cx = rect.width / 2;
+            const cy = rect.height / 2;
+            const dx = (x - cx) / cx;
+            const dy = (y - cy) / cy;
+            const rotateX = (dy * -4).toFixed(2);
+            const rotateY = (dx * 4).toFixed(2);
+            service.style.transform = 'perspective(800px) rotateX(' + rotateX + 'deg) rotateY(' + rotateY + 'deg)';
+            service.style.setProperty('--gx', x + 'px');
+            service.style.setProperty('--gy', y + 'px');
+            glow.style.opacity = '1';
+          };
+          const handleLeave = () => { service.style.transform = ''; glow.style.opacity = '0'; };
+          service.addEventListener('mousemove', (e) => {
+            if (!hasFinePointer.matches) return;
+            requestAnimationFrame(() => handleMove(e));
+          }, { passive: true });
+          service.addEventListener('mouseleave', handleLeave, { passive: true });
+        });
+        const hero = document.querySelector('.hero');
+        if (hero && hasFinePointer.matches) {
+          document.addEventListener('mousemove', (e) => {
+            requestAnimationFrame(() => {
+              const x = (e.clientX / window.innerWidth - 0.5) * 24;
+              const y = (e.clientY / window.innerHeight - 0.5) * 24;
+              hero.style.backgroundPosition = (50 + x) + '% ' + (50 + y) + '%';
+            });
+          }, { passive: true });
+        }
+        const h1 = document.querySelector('.hero h1');
+        if (h1 && !prefersReduced.matches) {
+          const text = h1.textContent;
+          h1.textContent = '';
+          let i = 0;
+          const type = () => {
+            if (i < text.length) {
+              h1.textContent += text.charAt(i);
+              i++;
+              setTimeout(type, 28);
+            } else {
+              h1.classList.add('in');
+            }
+          };
+          setTimeout(type, 350);
+        }
+        const steps = document.querySelector('.steps');
+        const processLine = document.querySelector('.process-line');
+        const updateProcessLine = () => {
+          if (!steps || !processLine) return;
+          const rect = steps.getBoundingClientRect();
+          const winHeight = window.innerHeight;
+          const top = rect.top;
+          const bottom = rect.bottom;
+          let progress = 0;
+          if (top < winHeight && bottom > 0) {
+            const visible = Math.min(winHeight - top, bottom) / (bottom - top);
+            progress = Math.max(0, Math.min(1, visible));
+          }
+          processLine.style.height = (progress * 100) + '%';
+        };
+        document.addEventListener('scroll', () => requestAnimationFrame(updateProcessLine), { passive: true });
+        updateProcessLine();
+        const reveals = document.querySelectorAll('.reveal');
+        reveals.forEach((el, idx) => {
+          if (idx % 3 === 1) el.classList.add('reveal-left');
+          if (idx % 3 === 2) el.classList.add('reveal-right');
         });
       })();
     </script>
