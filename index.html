@@ -1006,8 +1006,8 @@
         const SUPABASE_URL = "https://gndnnjjxzmarwnvkeaba.supabase.co";
         const SUPABASE_KEY = "sb_publishable_L_58cKj5-Zc9_bsMSsc3Hg_jTmaOEwH";
         const configured =
-          !SUPABASE_URL.includes("https://gndnnjjxzmarwnvkeaba.supabase.co") &&
-          !SUPABASE_KEY.includes(
+          SUPABASE_URL.includes("https://gndnnjjxzmarwnvkeaba.supabase.co") &&
+          SUPABASE_KEY.includes(
             "sb_publishable_L_58cKj5-Zc9_bsMSsc3Hg_jTmaOEwH",
           );
         const sb =
@@ -1186,6 +1186,7 @@
               "ok",
             );
           } catch (err) {
+            console.error("Erro ao enviar formulário:", err);
             setStatus(
               "Não foi possível enviar agora. Tente novamente em instantes ou fale pelo Instagram ou pelo e-mail studiomvcontato@gmail.com.",
               "bad",
