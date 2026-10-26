@@ -692,8 +692,70 @@ $("#reset-form").addEventListener("submit", async (e) => {
 });
 
 $("#logout").addEventListener("click", async () => {
+  closeMobileSidebar();
   await sb.auth.signOut();
   showScreen("login");
+});
+
+/* ===================== Navegação Móvel (Gaveta/Drawer) ===================== */
+const SIDEBAR = $("#sidebar");
+const SIDEBAR_BACKDROP = $("#sidebar-backdrop");
+const MENU_TOGGLE = $("#menu-toggle");
+const SIDEBAR_CLOSE = $("#sidebar-close");
+const MOBILE_PAGE_TITLE = $("#mobile-page-title");
+
+const PAGE_TITLES = {
+  "visao-geral": "Visão geral",
+  projetos: "Projetos",
+  projeto: "Projeto",
+  fila: "Fila de espera",
+  clientes: "Clientes",
+  cliente: "Cliente",
+  contratos: "Contratos",
+  contrato: "Contrato",
+  financeiro: "Financeiro",
+  mensagens: "Mensagens",
+  portfolio: "Portfólio",
+  configuracoes: "Configurações",
+};
+
+function openMobileSidebar() {
+  if (!SIDEBAR) return;
+  SIDEBAR.classList.add("open");
+  SIDEBAR_BACKDROP?.classList.add("open");
+  MENU_TOGGLE?.setAttribute("aria-expanded", "true");
+  document.body.style.overflow = "hidden";
+}
+
+function closeMobileSidebar() {
+  if (!SIDEBAR) return;
+  SIDEBAR.classList.remove("open");
+  SIDEBAR_BACKDROP?.classList.remove("open");
+  MENU_TOGGLE?.setAttribute("aria-expanded", "false");
+  document.body.style.overflow = "";
+}
+
+MENU_TOGGLE?.addEventListener("click", () => {
+  if (SIDEBAR?.classList.contains("open")) {
+    closeMobileSidebar();
+  } else {
+    openMobileSidebar();
+  }
+});
+
+SIDEBAR_CLOSE?.addEventListener("click", closeMobileSidebar);
+SIDEBAR_BACKDROP?.addEventListener("click", closeMobileSidebar);
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && SIDEBAR?.classList.contains("open")) {
+    closeMobileSidebar();
+  }
+});
+
+SIDEBAR?.addEventListener("click", (e) => {
+  if (e.target.closest("a")) {
+    closeMobileSidebar();
+  }
 });
 
 /* ===================== Rotas ===================== */
@@ -715,12 +777,17 @@ let ROUTE_TOKEN = 0;
 
 async function route() {
   if ($("#screen-app").hidden) return;
+  closeMobileSidebar();
   const parts = location.hash
     .replace(/^#\/?/, "")
     .split("/")
     .map(decodeURIComponent);
   const page = VIEWS[parts[0]] ? parts[0] : "visao-geral";
   const id = parts[1] || "";
+  if (MOBILE_PAGE_TITLE) {
+    MOBILE_PAGE_TITLE.textContent =
+      PAGE_TITLES[parts[0]] || PAGE_TITLES[page] || "Painel";
+  }
   $$("[data-nav]").forEach((a) =>
     a.classList.toggle("on", a.dataset.nav === page),
   );
