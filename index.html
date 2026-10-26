@@ -130,6 +130,9 @@
       .btn:hover {
         transform: translateY(-2px);
       }
+      .btn:active {
+        transform: translateY(1px);
+      }
       .btn-primary {
         background: var(--blue);
         color: var(--white);
@@ -270,6 +273,10 @@
       .service {
         padding: 32px 28px 8px 0;
         border-bottom: 1px solid var(--line);
+        transition: transform 0.35s ease, border-color 0.35s ease;
+      }
+      .service:hover {
+        transform: translateY(-6px);
       }
       .service + .service {
         padding-left: 28px;
@@ -582,6 +589,15 @@
         transform: none;
       }
 
+      /* flutuação sutil para elementos decorativos */
+      @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+      }
+      .float {
+        animation: float 6s ease-in-out infinite;
+      }
+
       /* responsivo */
       @media (max-width: 860px) {
         .toggle {
@@ -745,18 +761,7 @@
       .reveal-left { transform: translateX(-22px); }
       .reveal-right { transform: translateX(22px); }
 
-      /* Linha de progresso da seção processo */
-      .process-line {
-        position: absolute;
-        top: 0;
-        left: 50%;
-        width: 2px;
-        height: 0%;
-        background: var(--blue);
-        transform: translateX(-50%);
-        z-index: 0;
-        transition: height 0.7s ease;
-      }
+
 
       /* prefers-reduced-motion: desativa movimento, mantém cores */
       @media (prefers-reduced-motion: reduce) {
@@ -765,7 +770,6 @@
         .btn::after { display: none !important; }
         .service { transition: none !important; transform: none !important; }
         .service-glow { display: none !important; }
-        .process-line { transition: none !important; }
         .reveal-left, .reveal-right { transform: none !important; }
       }
     </style>
@@ -891,7 +895,7 @@
         <div class="wrap">
           <span class="eyebrow reveal">Como funciona</span>
           <h2 class="reveal">Do primeiro contato à publicação</h2>
-          <div class="process-line" aria-hidden="true"></div>
+
           <ol class="steps">
             <li class="reveal">
               <span class="n">01</span>
@@ -1076,7 +1080,7 @@
         <div class="foot">
           <div>
             <img src="logo.png" alt="Studio MV" />
-            <p>
+            <p id="foot-desc">
               Criação de sites, landing pages e funcionalidades personalizadas
               para empresas e comércios.
             </p>
@@ -1182,7 +1186,7 @@
         $("#copyright").textContent =
           `© ${new Date().getFullYear()} Studio MV. Todos os direitos reservados.`;
 
-        /* entrada suave ao rolar */
+        /* entrada suave ao rolar com atraso escalonado */
         const io = new IntersectionObserver(
           (entries) =>
             entries.forEach((en) => {
@@ -1193,7 +1197,10 @@
             }),
           { threshold: 0.12 },
         );
-        $$(".reveal").forEach((el) => io.observe(el));
+        $$(".reveal").forEach((el, idx) => {
+          el.style.setProperty("--d", `${idx * 90}ms`);
+          io.observe(el);
+        });
 
         /* botões de serviço preenchem o tipo de serviço */
         $$("[data-type]").forEach((a) =>
@@ -1202,6 +1209,25 @@
             if (select) select.value = a.dataset.type;
           }),
         );
+
+        /* configurações institucionais */
+        (async () => {
+          if (!sb) return;
+          try {
+            const { data } = await sb
+              .from("settings")
+              .select("key,value")
+              .in("key", ["footer_text"]);
+            if (data && data.length) {
+              const map = Object.fromEntries(data.map((r) => [r.key, r.value]));
+              if (map.footer_text && $("#foot-desc")) {
+                $("#foot-desc").textContent = map.footer_text;
+              }
+            }
+          } catch (e) {
+            console.error("Erro ao carregar configurações:", e);
+          }
+        })();
 
         /* portfólio: somente projetos publicados */
         (async () => {
@@ -1422,23 +1448,7 @@
           };
           setTimeout(type, 350);
         }
-        const steps = document.querySelector('.steps');
-        const processLine = document.querySelector('.process-line');
-        const updateProcessLine = () => {
-          if (!steps || !processLine) return;
-          const rect = steps.getBoundingClientRect();
-          const winHeight = window.innerHeight;
-          const top = rect.top;
-          const bottom = rect.bottom;
-          let progress = 0;
-          if (top < winHeight && bottom > 0) {
-            const visible = Math.min(winHeight - top, bottom) / (bottom - top);
-            progress = Math.max(0, Math.min(1, visible));
-          }
-          processLine.style.height = (progress * 100) + '%';
-        };
-        document.addEventListener('scroll', () => requestAnimationFrame(updateProcessLine), { passive: true });
-        updateProcessLine();
+
         const reveals = document.querySelectorAll('.reveal');
         reveals.forEach((el, idx) => {
           if (idx % 3 === 1) el.classList.add('reveal-left');

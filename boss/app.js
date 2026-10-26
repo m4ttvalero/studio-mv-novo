@@ -2218,7 +2218,7 @@ function financeReports(main) {
 }
 
 /* ===================== Mensagens e orçamentos ===================== */
-async function viewMessages(main) {
+async function viewMessages(main, openId) {
   const st = { q: "", status: "" };
   const msgs = await q(
     sb
@@ -2257,7 +2257,10 @@ async function viewMessages(main) {
       ],
       rows,
       (r) =>
-        `<button class="ghost sm" data-act="msg-open" data-id="${r.id}">Abrir</button>`,
+        `<div class="row-actions" style="margin:0">
+          <button class="ghost sm" data-act="msg-open" data-id="${r.id}">Abrir</button>
+          <button class="danger sm" data-act="msg-del" data-id="${r.id}">Excluir</button>
+        </div>`,
     );
   };
   INP["msg-q"] = (v) => {
@@ -2269,6 +2272,16 @@ async function viewMessages(main) {
     draw();
   };
   draw();
+  if (openId) {
+    const target = msgs.find((m) => m.id === openId);
+    if (target) {
+      openMessage(target);
+    } else {
+      q(sb.from("messages").select("*").eq("id", openId).single())
+        .then(openMessage)
+        .catch((e) => toast(friendly(e), false));
+    }
+  }
 }
 
 function openMessage(m) {
@@ -2300,7 +2313,10 @@ function openMessage(m) {
       <div class="field full"><label for="m-notes">Anotações internas</label>
         <textarea id="m-notes" name="notes" rows="3">${esc(m.internal_notes || "")}</textarea></div>
       <div class="form-msg" role="alert"></div>
-      <div class="form-actions"><button type="submit" class="ghost">Salvar</button></div>
+      <div class="form-actions" style="justify-content:space-between">
+        <button type="submit" class="ghost">Salvar</button>
+        <button type="button" class="danger" data-del-msg="${m.id}">Excluir mensagem</button>
+      </div>
     </form>
     <div style="margin-top:18px">
       <h3>Converter em cliente</h3>
@@ -2327,6 +2343,19 @@ function openMessage(m) {
           toast("Copiado.");
         } catch (err) {
           toast("Não foi possível copiar.", false);
+        }
+        return;
+      }
+      if (e.target.closest("[data-del-msg]")) {
+        if (!confirm("Excluir esta mensagem permanentemente?")) return;
+        try {
+          const { error } = await sb.from("messages").delete().eq("id", m.id);
+          if (error) throw error;
+          close();
+          toast("Mensagem excluída.");
+          await route();
+        } catch (err) {
+          toast(friendly(err), false);
         }
         return;
       }
@@ -2620,6 +2649,8 @@ GACT["msg-open"] = (id) => {
     .then(openMessage)
     .catch((e) => toast(friendly(e), false));
 };
+GACT["msg-del"] = (id) =>
+  removeRecord("messages", id, "Excluir esta mensagem permanentemente?");
 
 GACT["pf-new"] = () => portfolioForm();
 GACT["pf-edit"] = (id) =>
