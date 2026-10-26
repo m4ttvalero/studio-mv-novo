@@ -32,7 +32,7 @@
       }
       html {
         scroll-behavior: smooth;
-        scroll-padding-top: 84px;
+        scroll-padding-top: 72px;
       }
       body {
         margin: 0;
@@ -574,6 +574,20 @@
       .copy a {
         color: var(--blue-2);
       }
+      .back-to-top {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--blue-2);
+        text-decoration: none;
+        font-size: 0.92rem;
+        cursor: pointer;
+        transition: color 0.25s ease, transform 0.25s ease;
+      }
+      .back-to-top:hover {
+        color: var(--white);
+        transform: translateY(-2px);
+      }
 
       /* animação de entrada */
       .reveal {
@@ -646,9 +660,6 @@
         }
       }
       @media (prefers-reduced-motion: reduce) {
-        html {
-          scroll-behavior: auto;
-        }
         *,
         *::before,
         *::after {
@@ -776,7 +787,8 @@
   </head>
   <body>
     <div class="progress-bar" aria-hidden="true"></div>
-    <header id="top">
+    <div id="top" style="position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none;" aria-hidden="true"></div>
+    <header>
       <div class="wrap nav">
         <a href="#inicio" class="brand" aria-label="Studio MV — início"
           ><img src="logo.png" alt="Studio MV" height="44"
@@ -1086,11 +1098,9 @@
             </p>
             <a
               href="#top"
-              style="
-                color: var(--blue-2);
-                text-decoration: none;
-                font-size: 0.92rem;
-              "
+              class="back-to-top"
+              id="back-to-top"
+              aria-label="Voltar ao início da página"
               >↑ Voltar ao topo</a
             >
           </div>
@@ -1172,6 +1182,78 @@
           if (e.target.tagName === "A") {
             menu.classList.remove("open");
             toggle.setAttribute("aria-expanded", "false");
+          }
+        });
+
+        /* rolagem suave para links internos e voltar ao topo */
+        let currentScrollAnim = null;
+        const cancelScrollAnim = () => {
+          if (currentScrollAnim) {
+            cancelAnimationFrame(currentScrollAnim);
+            currentScrollAnim = null;
+          }
+        };
+        window.addEventListener("wheel", cancelScrollAnim, { passive: true });
+        window.addEventListener("touchmove", cancelScrollAnim, { passive: true });
+
+        const smoothScrollTo = (targetY) => {
+          cancelScrollAnim();
+          const startY = window.pageYOffset || document.documentElement.scrollTop;
+          const diff = targetY - startY;
+          if (Math.abs(diff) < 2) return;
+
+          const duration = Math.min(Math.max(420, Math.abs(diff) * 0.32), 850);
+          const startTime = performance.now();
+          const easeInOutCubic = (t) =>
+            t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+          const step = (now) => {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const ease = easeInOutCubic(progress);
+
+            window.scrollTo(0, Math.round(startY + diff * ease));
+
+            if (progress < 1) {
+              currentScrollAnim = requestAnimationFrame(step);
+            } else {
+              currentScrollAnim = null;
+            }
+          };
+
+          currentScrollAnim = requestAnimationFrame(step);
+        };
+
+        document.addEventListener("click", (e) => {
+          const a = e.target.closest('a[href^="#"]');
+          if (!a) return;
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+          const href = a.getAttribute("href");
+          if (!href || href === "#") return;
+
+          e.preventDefault();
+
+          if (href === "#top" || href === "#inicio") {
+            smoothScrollTo(0);
+            if (href === "#inicio") {
+              history.pushState(null, "", "#inicio");
+            } else {
+              history.pushState(null, "", window.location.pathname + window.location.search);
+            }
+            return;
+          }
+
+          const target = document.querySelector(href);
+          if (target) {
+            const headerEl = $("header");
+            const headerHeight = headerEl ? headerEl.offsetHeight : 72;
+            const targetPos = Math.max(
+              0,
+              target.getBoundingClientRect().top + window.pageYOffset - headerHeight,
+            );
+            smoothScrollTo(targetPos);
+            history.pushState(null, "", href);
           }
         });
 
