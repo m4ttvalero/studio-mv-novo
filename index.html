@@ -594,8 +594,8 @@
         opacity: 0;
         transform: translateY(22px);
         transition:
-          opacity 0.9s ease,
-          transform 0.9s ease;
+          opacity 0.5s ease,
+          transform 0.5s ease;
         transition-delay: var(--d, 0ms);
       }
       .reveal.in {
@@ -614,8 +614,13 @@
 
       /* responsivo */
       @media (max-width: 860px) {
+        .nav {
+          justify-content: flex-start;
+          gap: 14px;
+        }
         .toggle {
           display: block;
+          order: -1;
         }
         .menu {
           position: absolute;
@@ -790,9 +795,6 @@
     <div id="top" style="position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none;" aria-hidden="true"></div>
     <header>
       <div class="wrap nav">
-        <a href="#inicio" class="brand" aria-label="Studio MV — início"
-          ><img src="logo.png" alt="Studio MV" height="44"
-        /></a>
         <button
           class="toggle"
           aria-expanded="false"
@@ -801,6 +803,9 @@
         >
           Menu
         </button>
+        <a href="#inicio" class="brand" aria-label="Studio MV — início"
+          ><img src="logo.png" alt="Studio MV" height="44"
+        /></a>
         <ul class="menu" id="menu">
           <li><a href="#inicio">Início</a></li>
           <li><a href="#servicos">Serviços</a></li>
@@ -1063,7 +1068,7 @@
             <div class="field full">
               <label for="budget">Faixa de investimento (opcional)</label>
               <select id="budget" name="budget">
-                <option value="" selected>Selecione (opcional)</option>
+                <option value="" selected>Selecione</option>
                 <option value="Entre R$ 1.500 e R$ 3.000">Entre R$ 1.500 e R$ 3.000</option>
                 <option value="Entre R$ 3.000 e R$ 6.000">Entre R$ 3.000 e R$ 6.000</option>
                 <option value="Acima de R$ 6.000">Acima de R$ 6.000</option>
@@ -1280,7 +1285,7 @@
           { threshold: 0.12 },
         );
         $$(".reveal").forEach((el, idx) => {
-          el.style.setProperty("--d", `${idx * 90}ms`);
+          el.style.setProperty("--d", `${idx * 60}ms`);
           io.observe(el);
         });
 
