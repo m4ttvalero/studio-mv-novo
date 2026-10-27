@@ -129,6 +129,11 @@ const hit = (q, fields) => {
     )
   );
 };
+
+/* Campo de busca compartilhado — mesmo visual em todas as telas do painel (/boss) */
+const searchInput = (name, placeholder, ariaLabel) =>
+  `<input class="search-input" type="search" data-input="${esc(name)}" placeholder="${esc(placeholder)}" aria-label="${esc(ariaLabel)}">`;
+
 const safeName = (n) =>
   n
     .normalize("NFD")
@@ -1002,7 +1007,7 @@ async function viewProjects(main) {
     '<button class="btn-primary" data-act="proj-new">+ Novo projeto</button>',
     `
     <div class="toolbar">
-      <input type="search" data-input="proj-q" placeholder="Pesquisar por nome, cliente ou serviço" aria-label="Pesquisar projetos">
+      ${searchInput("proj-q", "Pesquisar por nome, cliente ou serviço", "Pesquisar projetos")}
       <select data-change="proj-status" aria-label="Filtrar por situação"><option value="">Todos os status</option>${PROJ_STATUS.map((s) => `<option>${esc(s)}</option>`).join("")}</select>
       <label class="check"><input type="checkbox" data-change="proj-showarch"> Mostrar arquivados</label>
     </div>
@@ -1220,7 +1225,7 @@ async function viewWaitlist(main) {
     `
     <p class="muted">Ordem de atendimento. Use as setas para reorganizar os itens que estão na fila.</p>
     <div class="toolbar">
-      <input type="search" data-input="wl-q" placeholder="Pesquisar por cliente ou serviço" aria-label="Pesquisar na fila">
+      ${searchInput("wl-q", "Pesquisar por cliente ou serviço", "Pesquisar na fila")}
       <select data-change="wl-state" aria-label="Filtrar por estado">
         <option value="Na fila">Na fila</option><option value="">Todos</option><option value="Movido para projeto">Movidos para projeto</option>
       </select>
@@ -1321,7 +1326,7 @@ async function viewClients(main) {
     '<button class="btn-primary" data-act="cli-new">+ Novo cliente</button>',
     `
     <div class="toolbar">
-      <input type="search" data-input="cli-q" placeholder="Pesquisar por nome, empresa, e-mail ou telefone" aria-label="Pesquisar clientes">
+      ${searchInput("cli-q", "Pesquisar por nome, empresa, e-mail ou telefone", "Pesquisar clientes")}
       <label class="check"><input type="checkbox" data-change="cli-showarch"> Mostrar arquivados</label>
     </div><div id="list"></div>`,
   );
@@ -1577,7 +1582,7 @@ async function viewContracts(main) {
     '<button class="btn-primary" data-act="con-new">+ Novo contrato</button>',
     `
     <div class="toolbar">
-      <input type="search" data-input="con-q" placeholder="Pesquisar por título ou cliente" aria-label="Pesquisar contratos">
+      ${searchInput("con-q", "Pesquisar por título ou cliente", "Pesquisar contratos")}
       <select data-change="con-status" aria-label="Filtrar por situação"><option value="">Todas as situações</option>${CONTRACT_STATUS.map((s) => `<option>${esc(s)}</option>`).join("")}</select>
       <label class="check"><input type="checkbox" data-change="con-showarch"> Mostrar arquivados</label>
     </div><div id="list"></div>`,
@@ -2047,7 +2052,7 @@ function financeReceivables(main) {
     `
     ${financeTabs("recebimentos")}
     <div class="toolbar">
-      <input type="search" data-input="rec-q" placeholder="Pesquisar por cliente ou descrição" aria-label="Pesquisar cobranças">
+      ${searchInput("rec-q", "Pesquisar por cliente ou descrição", "Pesquisar cobranças")}
       <select data-change="rec-status" aria-label="Filtrar por situação"><option value="">Todas as situações</option>${["A receber", "Parcial", "Vencido", "Recebido"].map((s) => `<option>${s}</option>`).join("")}</select>
     </div><div id="list"></div>`,
   );
@@ -2109,7 +2114,7 @@ function financeExpenses(main) {
     `
     ${financeTabs("despesas")}
     <div class="toolbar">
-      <input type="search" data-input="exp-q" placeholder="Pesquisar por descrição" aria-label="Pesquisar despesas">
+      ${searchInput("exp-q", "Pesquisar por descrição", "Pesquisar despesas")}
       <select data-change="exp-cat" aria-label="Filtrar por categoria"><option value="">Todas as categorias</option>${EXP_CAT.map((c) => `<option>${c}</option>`).join("")}</select>
     </div><div id="list"></div>`,
   );
@@ -2300,7 +2305,7 @@ async function viewMessages(main, openId) {
     "",
     `
     <div class="toolbar">
-      <input type="search" data-input="msg-q" placeholder="Pesquisar por nome, empresa, e-mail ou serviço" aria-label="Pesquisar solicitações">
+      ${searchInput("msg-q", "Pesquisar por nome, empresa, e-mail ou serviço", "Pesquisar solicitações")}
       <select data-change="msg-status" aria-label="Filtrar por situação"><option value="">Todas as situações</option>${MSG_STATUS.map((s) => `<option>${esc(s)}</option>`).join("")}</select>
     </div><div id="list"></div>`,
   );
