@@ -614,13 +614,8 @@
 
       /* responsivo */
       @media (max-width: 860px) {
-        .nav {
-          justify-content: flex-start;
-          gap: 14px;
-        }
         .toggle {
           display: block;
-          order: -1;
         }
         .menu {
           position: absolute;
@@ -795,6 +790,9 @@
     <div id="top" style="position: absolute; top: 0; left: 0; width: 1px; height: 1px; pointer-events: none;" aria-hidden="true"></div>
     <header>
       <div class="wrap nav">
+        <a href="#inicio" class="brand" aria-label="Studio MV — início"
+          ><img src="logo.png" alt="Studio MV" height="44"
+        /></a>
         <button
           class="toggle"
           aria-expanded="false"
@@ -803,9 +801,6 @@
         >
           Menu
         </button>
-        <a href="#inicio" class="brand" aria-label="Studio MV — início"
-          ><img src="logo.png" alt="Studio MV" height="44"
-        /></a>
         <ul class="menu" id="menu">
           <li><a href="#inicio">Início</a></li>
           <li><a href="#servicos">Serviços</a></li>
