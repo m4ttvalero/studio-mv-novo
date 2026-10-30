@@ -589,13 +589,17 @@
         transform: translateY(-2px);
       }
 
-      /* animação de entrada */
+      /* animação de entrada — velocidade padrão para todo o site */
+      :root {
+        --reveal-duration: 0.4s;
+        --reveal-distance: 16px;
+      }
       .reveal {
         opacity: 0;
-        transform: translateY(22px);
+        transform: translateY(var(--reveal-distance));
         transition:
-          opacity 0.5s ease,
-          transform 0.5s ease;
+          opacity var(--reveal-duration) ease,
+          transform var(--reveal-duration) ease;
         transition-delay: var(--d, 0ms);
       }
       .reveal.in {
@@ -770,8 +774,8 @@
       .service:hover .service-glow { opacity: 1; }
 
       /* Variação de direção da entrada das seções */
-      .reveal-left { transform: translateX(-22px); }
-      .reveal-right { transform: translateX(22px); }
+      .reveal-left { transform: translateX(-var(--reveal-distance)); }
+      .reveal-right { transform: translateX(var(--reveal-distance)); }
 
 
 
@@ -818,15 +822,15 @@
       <section id="inicio" class="hero">
         <div class="wrap">
           <span class="eyebrow reveal">Studio MV · Criação de sites</span>
-          <h1 class="reveal" style="--d: 80ms">
+          <h1 class="reveal">
             Sites profissionais para o seu negócio ser encontrado e escolhido.
           </h1>
-          <p class="lead reveal" style="--d: 160ms">
+          <p class="lead reveal">
             A Studio MV é especializada na criação de sites, landing pages e
             soluções digitais sob medida para empresas e comércios que querem
             transmitir confiança desde o primeiro acesso.
           </p>
-          <div class="actions reveal" style="--d: 240ms">
+          <div class="actions reveal">
             <a href="#servicos" class="btn btn-ghost">Conhecer serviços</a>
             <a href="#contato" class="btn btn-primary">Solicitar orçamento</a>
           </div>
@@ -854,7 +858,7 @@
                 >Solicitar orçamento</a
               >
             </article>
-            <article class="service reveal" style="--d: 120ms">
+            <article class="service reveal">
               <span class="num">02</span>
               <h3>Sites institucionais</h3>
               <p>
@@ -869,7 +873,7 @@
                 >Solicitar orçamento</a
               >
             </article>
-            <article class="service reveal" style="--d: 240ms">
+            <article class="service reveal">
               <span class="num">03</span>
               <h3>Funcionalidades personalizadas</h3>
               <p>
@@ -918,7 +922,7 @@
                 precisa.
               </p>
             </li>
-            <li class="reveal" style="--d: 80ms">
+            <li class="reveal">
               <span class="n">02</span>
               <h3>Entendimento</h3>
               <p>
@@ -926,29 +930,29 @@
                 objetivos.
               </p>
             </li>
-            <li class="reveal" style="--d: 160ms">
+            <li class="reveal">
               <span class="n">03</span>
               <h3>Proposta</h3>
               <p>
                 Apresentamos o escopo, o prazo e o orçamento para você avaliar.
               </p>
             </li>
-            <li class="reveal" style="--d: 240ms">
+            <li class="reveal">
               <span class="n">04</span>
               <h3>Desenvolvimento</h3>
               <p>Com a proposta aprovada, o projeto entra em produção.</p>
             </li>
-            <li class="reveal" style="--d: 320ms">
+            <li class="reveal">
               <span class="n">05</span>
               <h3>Revisão</h3>
               <p>Você recebe a versão para análise e conferência.</p>
             </li>
-            <li class="reveal" style="--d: 400ms">
+            <li class="reveal">
               <span class="n">06</span>
               <h3>Ajustes</h3>
               <p>Fazemos as alterações acordadas entre as partes.</p>
             </li>
-            <li class="reveal" style="--d: 480ms">
+            <li class="reveal">
               <span class="n">07</span>
               <h3>Publicação</h3>
               <p>Depois da sua aprovação, o projeto vai ao ar.</p>
@@ -972,7 +976,7 @@
               primeiro contato até a entrega.
             </p>
           </div>
-          <blockquote class="quote reveal" style="--d: 120ms">
+          <blockquote class="quote reveal">
             Tecnologia a serviço de um objetivo claro: fazer o seu negócio ser
             encontrado e escolhido.
           </blockquote>
@@ -1005,7 +1009,6 @@
             id="lead"
             novalidate
             class="reveal"
-            style="--d: 120ms"
             aria-describedby="status"
           >
             <div class="field">
@@ -1269,7 +1272,7 @@
         $("#copyright").textContent =
           `© ${new Date().getFullYear()} Studio MV. Todos os direitos reservados.`;
 
-        /* entrada suave ao rolar com atraso escalonado */
+        /* entrada suave ao rolar — velocidade padrão para todo o site */
         const io = new IntersectionObserver(
           (entries) =>
             entries.forEach((en) => {
@@ -1278,10 +1281,10 @@
                 io.unobserve(en.target);
               }
             }),
-          { threshold: 0.12 },
+          { threshold: 0.08 },
         );
-        $$(".reveal").forEach((el, idx) => {
-          el.style.setProperty("--d", `${idx * 60}ms`);
+        $$(".reveal").forEach((el) => {
+          el.style.setProperty("--d", "0ms");
           io.observe(el);
         });
 
