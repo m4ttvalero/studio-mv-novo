@@ -49,6 +49,11 @@ const SERVICES = [
   "Funcionalidade personalizada",
   "Ainda não sei",
 ];
+const PORTFOLIO_TYPES = [
+  "Landing Page",
+  "Site Institucional",
+  "Funcionalidade Personalizada",
+];
 const TABLE_LABEL = {
   clients: "Cliente",
   projects: "Projeto",
@@ -483,6 +488,18 @@ function fieldInput(f, values) {
           `<option value="${esc(val)}" ${String(v) === String(val) ? "selected" : ""}>${esc(lab)}</option>`,
       )
       .join("")}</select>`;
+  } else if (f.t === "tiles") {
+    const opts = f.opts || [];
+    const tilesHtml = opts
+      .map(
+        (opt) => `
+      <label class="tile" style="display:inline-flex;flex-direction:column;align-items:center;gap:6px;padding:16px 10px;border:1px solid var(--line);border-radius:10px;background:${String(v) === opt ? "var(--navy-2)" : "transparent"};color:var(--text);cursor:pointer;transition:all 0.2s;width:100%;text-align:center;min-height:96px;justify-content:center">
+        <input type="radio" name="${f.k}" value="${esc(opt)}" ${String(v) === opt ? "checked" : ""} style="display:none">
+        <span style="font-size:0.92rem;font-weight:600;letter-spacing:-0.01em">${esc(opt)}</span>
+      </label>`,
+      )
+      .join("");
+    control = `<div class="tiles-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">${tilesHtml}</div>`;
   } else if (f.t === "money") {
     const shown = typeof v === "number" ? v.toFixed(2).replace(".", ",") : v;
     control = `<input id="${id}" name="${f.k}" inputmode="decimal" placeholder="0,00" value="${esc(shown)}">`;
@@ -514,6 +531,16 @@ function readFields(form, fields) {
     }
     if (f.t === "bool") {
       out[f.k] = el.checked;
+      continue;
+    }
+    if (f.t === "tiles") {
+      const checked = form.querySelector(`input[name="${f.k}"]:checked`);
+      const v = checked ? checked.value : "";
+      if (f.req && !v) {
+        errs.push(`Preencha: ${f.l}.`);
+        continue;
+      }
+      out[f.k] = v || null;
       continue;
     }
     const v = (el.value || "").trim();
@@ -2473,7 +2500,7 @@ function openMessage(m) {
 /* ===================== Portfólio ===================== */
 const PORTFOLIO_FIELDS = [
   { k: "title", l: "Título", req: 1 },
-  { k: "category", l: "Categoria" },
+  { k: "category", l: "Tipo de trabalho", t: "tiles", opts: PORTFOLIO_TYPES },
   { k: "link", l: "Link público (https)", t: "url", full: 1 },
   { k: "description", l: "Descrição", t: "textarea", full: 1 },
   { k: "published", l: "Publicar no site", t: "bool", full: 1 },
@@ -2800,4 +2827,19 @@ if (location.hash.includes("type=recovery")) {
 sb.auth.onAuthStateChange((event) => {
   if (event === "PASSWORD_RECOVERY") showScreen("reset");
   if (event === "SIGNED_OUT") showScreen("login");
+});
+
+/* ===== Gerenciamento de cartões de seleção (tiles) ===== */
+document.addEventListener("click", (e) => {
+  const tile = e.target.closest(".tile");
+  if (!tile) return;
+  const radio = tile.querySelector('input[type="radio"]');
+  if (!radio) return;
+  const name = radio.name;
+  document.querySelectorAll(`input[name="${name}"]`).forEach((r) => {
+    r.checked = false;
+    r.closest(".tile")?.classList.remove("selected");
+  });
+  radio.checked = true;
+  tile.classList.add("selected");
 });
