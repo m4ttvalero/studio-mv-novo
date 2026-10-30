@@ -17,11 +17,11 @@
     </script>
     <style>
       :root {
-        --navy: #0a1630;
-        --navy-2: #12224a;
-        --deep: #060d1f;
+        --navy: #0b1a3a;
+        --navy-2: #11234d;
+        --deep: #05070d;
         --paper: #eef1f7;
-        --ink: #0a1630;
+        --ink: #0b1a3a;
         --white: #fff;
         --text: #e4eaf7;
         --muted: #9db0d6;
@@ -49,7 +49,7 @@
           Roboto,
           sans-serif;
         color: var(--text);
-        background: var(--navy);
+        background: var(--deep);
         overflow-x: hidden;
       }
       img {
@@ -197,7 +197,7 @@
           border-color 0.25s;
       }
       header.scrolled {
-        background: rgba(10, 22, 48, 0.94);
+        background: rgba(5, 7, 13, 0.94);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
         border-color: var(--line);
@@ -214,8 +214,9 @@
       }
       .brand img {
         height: 44px;
-        width: auto;
-        mix-blend-mode: screen;
+        width: 44px;
+        border-radius: 50%;
+        object-fit: cover;
       }
       .menu {
         display: flex;
@@ -319,84 +320,18 @@
         flex-wrap: wrap;
         margin-top: 36px;
       }
-      .rings {
-        position: absolute;
-        right: -6%;
-        top: 14%;
-        width: min(54vw, 660px);
-        aspect-ratio: 1;
-        pointer-events: none;
-        z-index: 1;
-        transform: translate(
-          calc(var(--px, 0) * 1px),
-          calc(var(--py, 0) * 1px + var(--sy, 0) * 1px)
-        );
-        transition: transform 0.3s ease-out;
-      }
-      .ring {
-        position: absolute;
-        inset: 0;
-        border: 1px solid rgba(255, 255, 255, 0.28);
-        border-radius: 50%;
-        animation: spin 44s linear infinite;
-      }
-      .ring::after {
-        content: "";
-        position: absolute;
-        top: -6px;
-        left: 50%;
-        width: 12px;
-        height: 12px;
-        margin-left: -6px;
-        border-radius: 50%;
-        background: #fff;
-      }
-      .ring:nth-child(2) {
-        inset: 13%;
-        border: 1px dashed var(--blue-2);
-        animation-duration: 28s;
-        animation-direction: reverse;
-      }
-      .ring:nth-child(2)::after {
-        background: var(--blue-2);
-      }
-      .ring:nth-child(3) {
-        inset: 27%;
-        border-color: rgba(255, 255, 255, 0.18);
-        animation-duration: 60s;
-      }
-      .disc {
-        position: absolute;
-        inset: 41%;
-        border-radius: 50%;
-        background: var(--blue);
-        animation: breathe 6s ease-in-out infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-      @keyframes breathe {
-        50% {
-          transform: scale(1.14);
-        }
-      }
       .marquee {
         margin-top: 72px;
         overflow: hidden;
         border-top: 1px solid var(--line);
         border-bottom: 1px solid var(--line);
         padding: 16px 0;
-        background: var(--deep);
+        background: var(--navy);
       }
       .track {
         display: flex;
         width: max-content;
         animation: mq 30s linear infinite;
-      }
-      .marquee:hover .track {
-        animation-play-state: paused;
       }
       .track span {
         font-size: clamp(1.5rem, 3.2vw, 2.4rem);
@@ -774,9 +709,10 @@
         gap: 48px;
       }
       .foot img {
-        height: 48px;
-        width: auto;
-        mix-blend-mode: screen;
+        height: 56px;
+        width: 56px;
+        border-radius: 50%;
+        object-fit: cover;
         margin-bottom: 18px;
       }
       .foot ul {
@@ -839,7 +775,7 @@
           right: 0;
           flex-direction: column;
           gap: 0;
-          background: var(--navy);
+          background: var(--deep);
           border-bottom: 1px solid var(--line);
           display: none;
           padding: 8px 24px;
@@ -872,12 +808,6 @@
         }
         .steps li {
           grid-template-columns: 64px 1fr;
-        }
-        .rings {
-          width: 92vw;
-          right: -32%;
-          top: 8%;
-          opacity: 0.55;
         }
         section {
           padding: 84px 0;
@@ -932,7 +862,7 @@
     <header>
       <div class="wrap nav">
         <a href="#inicio" class="brand" aria-label="Studio MV — início"
-          ><img src="img/logo.png" alt="Studio MV" height="44"
+          ><img src="img/logo.png" alt="Studio MV" width="44" height="44"
         /></a>
         <button
           class="toggle"
@@ -956,12 +886,6 @@
 
     <main>
       <section id="inicio" class="hero">
-        <div class="rings" aria-hidden="true">
-          <div class="ring"></div>
-          <div class="ring"></div>
-          <div class="ring"></div>
-          <div class="disc"></div>
-        </div>
         <div style="width: 100%">
           <div class="wrap">
             <h1 data-split>
@@ -1149,7 +1073,7 @@
         </div>
       </section>
 
-      <section id="contato" style="background: var(--deep)">
+      <section id="contato" style="background: var(--navy)">
         <div class="wrap contact">
           <div class="rv rv-l">
             <h2>Conte o que você precisa</h2>
@@ -1401,7 +1325,6 @@
 
         /* efeitos ligados à rolagem */
         const bar = $(".progress"),
-          rings = $(".rings"),
           steps = $$(".steps li");
         let last = 0,
           ticking = false;
@@ -1416,8 +1339,6 @@
             y > last && y > 400 && !menu.classList.contains("open"),
           );
           last = y;
-          if (rings && !reduce)
-            rings.style.setProperty("--sy", (y * -0.12).toFixed(1));
           const r = quote.getBoundingClientRect();
           const p = reduce
             ? 1
@@ -1447,24 +1368,8 @@
         window.addEventListener("resize", update);
         update();
 
-        /* parallax dos anéis e botões magnéticos (só com mouse) */
+        /* botões magnéticos (só com mouse) */
         if (fine && !reduce) {
-          document.addEventListener(
-            "mousemove",
-            (e) => {
-              if (rings) {
-                rings.style.setProperty(
-                  "--px",
-                  ((e.clientX / innerWidth - 0.5) * -36).toFixed(1),
-                );
-                rings.style.setProperty(
-                  "--py",
-                  ((e.clientY / innerHeight - 0.5) * -36).toFixed(1),
-                );
-              }
-            },
-            { passive: true },
-          );
           $$(".btn").forEach((b) => {
             b.addEventListener("mousemove", (e) => {
               const r = b.getBoundingClientRect();
