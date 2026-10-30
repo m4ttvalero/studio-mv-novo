@@ -493,13 +493,13 @@ function fieldInput(f, values) {
     const tilesHtml = opts
       .map(
         (opt) => `
-      <label class="tile" style="display:inline-flex;flex-direction:column;align-items:center;gap:6px;padding:16px 10px;border:1px solid var(--line);border-radius:10px;background:${String(v) === opt ? "var(--navy-2)" : "transparent"};color:var(--text);cursor:pointer;transition:all 0.2s;width:100%;text-align:center;min-height:96px;justify-content:center">
+      <label class="btn-ghost tile-btn" style="display:flex;width:100%;padding:13px 24px;border-radius:999px;border:1px solid var(--line);color:var(--white);background:transparent;font:inherit;font-weight:600;cursor:pointer;transition:all 0.25s;text-align:center;margin-bottom:10px;${String(v) === opt ? "border-color:var(--blue-2);box-shadow:0 0 0 3px rgba(31,107,255,0.18)" : ""}">
         <input type="radio" name="${f.k}" value="${esc(opt)}" ${String(v) === opt ? "checked" : ""} style="display:none">
-        <span style="font-size:0.92rem;font-weight:600;letter-spacing:-0.01em">${esc(opt)}</span>
+        ${esc(opt)}
       </label>`,
       )
       .join("");
-    control = `<div class="tiles-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">${tilesHtml}</div>`;
+    control = `<div style="display:flex;flex-direction:column;gap:10px">${tilesHtml}</div>`;
   } else if (f.t === "money") {
     const shown = typeof v === "number" ? v.toFixed(2).replace(".", ",") : v;
     control = `<input id="${id}" name="${f.k}" inputmode="decimal" placeholder="0,00" value="${esc(shown)}">`;
@@ -2829,17 +2829,24 @@ sb.auth.onAuthStateChange((event) => {
   if (event === "SIGNED_OUT") showScreen("login");
 });
 
-/* ===== Gerenciamento de cartões de seleção (tiles) ===== */
+/* ===== Gerenciamento de seleção de tipo de trabalho (botões no estilo btn-ghost) ===== */
 document.addEventListener("click", (e) => {
-  const tile = e.target.closest(".tile");
-  if (!tile) return;
-  const radio = tile.querySelector('input[type="radio"]');
+  const btn = e.target.closest(".tile-btn");
+  if (!btn) return;
+  const radio = btn.querySelector('input[type="radio"]');
   if (!radio) return;
   const name = radio.name;
+  // Desmarca todos do mesmo grupo e reseta o estilo
   document.querySelectorAll(`input[name="${name}"]`).forEach((r) => {
     r.checked = false;
-    r.closest(".tile")?.classList.remove("selected");
+    const lbl = r.closest(".tile-btn");
+    if (lbl) {
+      lbl.style.borderColor = "var(--line)";
+      lbl.style.boxShadow = "";
+    }
   });
+  // Marca o clicado e aplica estilo de selecionado
   radio.checked = true;
-  tile.classList.add("selected");
+  btn.style.borderColor = "var(--blue-2)";
+  btn.style.boxShadow = "0 0 0 3px rgba(31,107,255,0.18)";
 });
