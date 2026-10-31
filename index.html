@@ -159,9 +159,10 @@
       @media (max-width:900px){
         .toggle{display:block}
         .menu{position:absolute;top:72px;left:0;right:0;flex-direction:column;gap:0;background:var(--deep);border-bottom:1px solid var(--line);display:none;padding:8px 24px}
-        .menu.open{display:flex}
-        .menu a{display:block;padding:14px 0;background:none}
-        .nav .btn{display:none}
+        .nav{flex-wrap:wrap}
+        .menu.open{display:flex;justify-content:center;align-items:center;text-align:center}
+        .menu a{display:block;padding:14px 0;background:none;text-align:center}
+        .nav .btn{display:block;width:100%;text-align:center;margin-top:12px}
         .service{grid-template-columns:1fr;gap:14px;padding:32px 16px}
         .how,.about-text,.contact,.foot{grid-template-columns:minmax(0,1fr);gap:36px}
         .js .rv-l,.js .rv-r{transform:translateY(46px)}
@@ -689,9 +690,10 @@
         if(!canvas) return;
         var ctx = canvas.getContext('2d');
         var width, height, particles = [];
-        var particleCount = 36;
+        var particleCount = 60;
         var reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
         var mouse = {x:-1000,y:-1000};
+        var connectDist = 150;
 
         function resize(){
           width = canvas.width = window.innerWidth;
@@ -707,23 +709,23 @@
         Particle.prototype.reset = function(){
           this.x = Math.random()*width;
           this.y = Math.random()*height;
-          this.vx = (Math.random()-0.5)*0.22;
-          this.vy = (Math.random()-0.5)*0.22;
-          this.size = Math.random()*1.2+0.4;
-          this.alpha = Math.random()*0.3+0.04;
-          this.hue = 195 + Math.random()*50;
+          this.vx = (Math.random()-0.5)*0.25;
+          this.vy = (Math.random()-0.5)*0.25;
+          this.size = Math.random()*1.4+0.4;
+          this.alpha = Math.random()*0.35+0.05;
+          this.hue = 190 + Math.random()*60;
         };
         Particle.prototype.update = function(){
           this.x += this.vx;
           this.y += this.vy;
           var dx = mouse.x - this.x, dy = mouse.y - this.y;
           var d = Math.sqrt(dx*dx+dy*dy);
-          if(d < 180){
-            this.vx += (dx/d)*0.004;
-            this.vy += (dy/d)*0.004;
+          if(d < 200){
+            this.vx += (dx/d)*0.005;
+            this.vy += (dy/d)*0.005;
           }
           var s = Math.sqrt(this.vx*this.vx+this.vy*this.vy);
-          if(s > 0.5){this.vx = (this.vx/s)*0.5; this.vy = (this.vy/s)*0.5;}
+          if(s > 0.6){this.vx = (this.vx/s)*0.6; this.vy = (this.vy/s)*0.6;}
           if(this.x < 0 || this.x > width) this.vx *= -1;
           if(this.y < 0 || this.y > height) this.vy *= -1;
         };
@@ -736,9 +738,29 @@
 
         for(var i=0;i<particleCount;i++) particles.push(new Particle());
 
+        function drawConnections(){
+          for(var i=0;i<particles.length;i++){
+            for(var j=i+1;j<particles.length;j++){
+              var p1=particles[i], p2=particles[j];
+              var dx=p1.x-p2.x, dy=p1.y-p2.y;
+              var d=Math.sqrt(dx*dx+dy*dy);
+              if(d < connectDist){
+                var alpha = 0.06*(1-d/connectDist);
+                ctx.strokeStyle = 'hsla(210,70%,65%,'+alpha+')';
+                ctx.lineWidth = 0.6;
+                ctx.beginPath();
+                ctx.moveTo(p1.x,p1.y);
+                ctx.lineTo(p2.x,p2.y);
+                ctx.stroke();
+              }
+            }
+          }
+        }
+
         function loop(){
           if(!reduced){
             ctx.clearRect(0,0,width,height);
+            drawConnections();
             for(var p=0;p<particles.length;p++){
               particles[p].update();
               particles[p].draw();
