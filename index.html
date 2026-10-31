@@ -11,7 +11,7 @@
       :root{--navy:#0b1a3a;--navy-2:#11234d;--deep:#05070d;--paper:#eef1f7;--ink:#0b1a3a;--white:#fff;--text:#e4eaf7;--muted:#9db0d6;--muted-ink:#4a5b80;--line:rgba(255,255,255,.16);--line-ink:rgba(10,22,48,.18);--blue:#1f6bff;--blue-2:#6fa3ff;--max:1160px;--ease:cubic-bezier(.2,.7,.2,1)}
       *{box-sizing:border-box}
       html{scroll-behavior:smooth;scroll-padding-top:72px}
-      body{margin:0;font:17px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--text);background:var(--deep);overflow-x:hidden}
+      body{margin:0;font:17px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--text);overflow-x:hidden}
       img{display:block;max-width:100%}
       a{color:inherit}
       .wrap{width:min(var(--max),calc(100% - 48px));margin:0 auto}
@@ -176,9 +176,13 @@
         .js .rv,.w>i{opacity:1;transform:none}
         .sw{opacity:1}.steps li{opacity:1}
       }
+
+      /* fundo animado: partículas sutis */
+      #bg-canvas{position:fixed;inset:0;z-index:-1;width:100%;height:100%;display:block;pointer-events:none}
     </style>
   </head>
   <body>
+    <canvas id="bg-canvas" aria-hidden="true"></canvas>
     <div class="progress" aria-hidden="true"></div>
     <div id="top" style="position:absolute;top:0;left:0;width:1px;height:1px;pointer-events:none" aria-hidden="true"></div>
     <header>
@@ -676,6 +680,73 @@
             btn.textContent = "Enviar solicitação";
           }
         });
+      })();
+    </script>
+
+    <script>
+      (function(){
+        var canvas = document.getElementById('bg-canvas');
+        if(!canvas) return;
+        var ctx = canvas.getContext('2d');
+        var width, height, particles = [];
+        var particleCount = 36;
+        var reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+        var mouse = {x:-1000,y:-1000};
+
+        function resize(){
+          width = canvas.width = window.innerWidth;
+          height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+        window.addEventListener('mousemove', function(e){mouse.x=e.clientX;mouse.y=e.clientY;});
+
+        function Particle(){
+          this.reset();
+        }
+        Particle.prototype.reset = function(){
+          this.x = Math.random()*width;
+          this.y = Math.random()*height;
+          this.vx = (Math.random()-0.5)*0.22;
+          this.vy = (Math.random()-0.5)*0.22;
+          this.size = Math.random()*1.2+0.4;
+          this.alpha = Math.random()*0.3+0.04;
+          this.hue = 195 + Math.random()*50;
+        };
+        Particle.prototype.update = function(){
+          this.x += this.vx;
+          this.y += this.vy;
+          var dx = mouse.x - this.x, dy = mouse.y - this.y;
+          var d = Math.sqrt(dx*dx+dy*dy);
+          if(d < 180){
+            this.vx += (dx/d)*0.004;
+            this.vy += (dy/d)*0.004;
+          }
+          var s = Math.sqrt(this.vx*this.vx+this.vy*this.vy);
+          if(s > 0.5){this.vx = (this.vx/s)*0.5; this.vy = (this.vy/s)*0.5;}
+          if(this.x < 0 || this.x > width) this.vx *= -1;
+          if(this.y < 0 || this.y > height) this.vy *= -1;
+        };
+        Particle.prototype.draw = function(){
+          ctx.fillStyle = 'hsla('+this.hue+',70%,65%,'+this.alpha+')';
+          ctx.beginPath();
+          ctx.arc(this.x,this.y,this.size,0,Math.PI*2);
+          ctx.fill();
+        };
+
+        for(var i=0;i<particleCount;i++) particles.push(new Particle());
+
+        function loop(){
+          if(!reduced){
+            ctx.clearRect(0,0,width,height);
+            for(var p=0;p<particles.length;p++){
+              particles[p].update();
+              particles[p].draw();
+            }
+          }
+          requestAnimationFrame(loop);
+        }
+        loop();
       })();
     </script>
   </body>
