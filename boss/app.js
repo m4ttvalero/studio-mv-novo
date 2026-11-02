@@ -76,6 +76,7 @@ const ACTION_LABEL = {
 /* Cache dos dados de apoio (clientes, projetos, contratos) e financeiro */
 const DB = { clients: [], projects: [], contracts: [] };
 let FIN = { receivables: [], payments: [], expenses: [] };
+let MEMBER_CONTEXT = { isAdmin: false, profile: null };
 const CACHE = {
   clients: () => DB.clients,
   projects: () => DB.projects,
@@ -367,7 +368,7 @@ function contractFin(c) {
 /* ===================== Componentes de interface ===================== */
 function badge(s) {
   const cls =
-    /Recebido|Ativo|Concluído|Entregue|Publicado|Convertida|Movido/.test(s)
+    /Recebido|Ativo|Concluíd[oa]|Entregue|Publicado|Convertida|Movido/.test(s)
       ? "ok"
       : /Vencido|Cancelado|Arquivada/.test(s)
         ? "bad"
@@ -409,24 +410,33 @@ function waLink(num) {
   return `<a href="https://wa.me/${full}" target="_blank" rel="noopener noreferrer">${esc(num)}</a>`;
 }
 
-function barChart(labels, a, b) {
+function lineChart(labels, a, b) {
   const W = 640,
-    H = 230,
-    P = 30;
-  const max = Math.max(1, ...a, ...b);
-  const gap = (W - P * 2) / labels.length;
-  const bw = Math.min(18, gap / 3);
-  const bars = labels
-    .map((l, i) => {
-      const x = P + i * gap + gap / 2 - bw;
-      const ha = (a[i] / max) * (H - 60);
-      const hb = (b[i] / max) * (H - 60);
-      return `<rect class="bar-in" x="${x}" y="${H - 30 - ha}" width="${bw}" height="${ha}" rx="4"/>
-      <rect class="bar-out" x="${x + bw + 4}" y="${H - 30 - hb}" width="${bw}" height="${hb}" rx="4"/>
-      <text x="${x + bw + 2}" y="${H - 10}" text-anchor="middle">${esc(l.slice(5))}/${esc(l.slice(2, 4))}</text>`;
-    })
-    .join("");
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Receitas e despesas dos últimos seis meses">${bars}</svg>
+    H = 238,
+    left = 64,
+    right = 12,
+    top = 14,
+    bottom = 205,
+    max = 10000;
+  const x = (i) => left + (i * (W - left - right)) / Math.max(1, labels.length - 1);
+  const y = (value) => bottom - (Math.min(Math.max(0, value), max) / max) * (bottom - top);
+  const grid = Array.from({ length: 10 }, (_, i) => {
+    const value = (i + 1) * 1000;
+    const yy = y(value);
+    return `<line class="grid-line" x1="${left}" y1="${yy}" x2="${W - right}" y2="${yy}"/>
+      <text class="axis-label" x="${left - 8}" y="${yy + 4}" text-anchor="end">${value.toLocaleString("pt-BR")}</text>`;
+  }).join("");
+  const line = (values, cls, label) => {
+    const path = values.map((value, i) => `${i ? "L" : "M"}${x(i)},${y(value)}`).join(" ");
+    const points = values.map((value, i) =>
+      `<circle class="chart-point ${cls}" cx="${x(i)}" cy="${y(value)}" r="3.5"><title>${esc(label)} · ${esc(labels[i])}: ${brl(value)}</title></circle>`,
+    ).join("");
+    return `<path class="chart-line ${cls}" d="${path}"/>${points}`;
+  };
+  const monthLabels = labels.map((label, i) =>
+    `<text class="axis-label" x="${x(i)}" y="${H - 10}" text-anchor="middle">${esc(label.slice(5))}/${esc(label.slice(2, 4))}</text>`,
+  ).join("");
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Receitas e despesas dos últimos seis meses; escala de R$ 1.000 a R$ 10.000">${grid}${monthLabels}${line(a, "line-in", "Recebido")}${line(b, "line-out", "Despesas")}</svg>
     <div class="legend"><span><span class="sw in"></span>Recebido</span><span><span class="sw out"></span>Despesas</span></div>`;
 }
 
@@ -642,14 +652,43 @@ async function enterApp() {
     showScreen("login");
     return;
   }
-  const { data: isAdmin, error } = await sb.rpc("is_admin");
-  if (error || !isAdmin) {
+  const { data: isAdmin, error: adminError } = await sb.rpc("is_admin");
+  if (adminError) {
+    showScreen("login");
+    authMsg("login-msg", friendly(adminError));
+    return;
+  }
+  if (isAdmin) {
+    MEMBER_CONTEXT = { isAdmin: true, profile: null };
+  } else {
+    const { data: isMember, error: memberError } =
+      await sb.rpc("is_active_member");
+    if (memberError || !isMember) {
+      await sb.auth.signOut();
+      showScreen("login");
+      authMsg("login-msg", "Esta conta não tem acesso ao painel.");
+      return;
+    }
+    const { data: profile, error: profileError } = await sb
+      .from("members")
+      .select("user_id,email,name,job_title,permissions")
+      .eq("user_id", session.user.id)
+      .single();
+    if (profileError) {
+      showScreen("login");
+      authMsg("login-msg", friendly(profileError));
+      return;
+    }
+    MEMBER_CONTEXT = { isAdmin: false, profile };
+  }
+  if (!isAdmin && !MEMBER_CONTEXT.profile) {
     await sb.auth.signOut();
     showScreen("login");
     authMsg("login-msg", "Esta conta não tem acesso ao painel.");
     return;
   }
   $("#user-email").textContent = session.user.email;
+  updateNavigation();
   showScreen("app");
   await route();
 }
@@ -749,6 +788,9 @@ const PAGE_TITLES = {
   mensagens: "Mensagens",
   portfolio: "Portfólio",
   configuracoes: "Configurações",
+  membros: "Add. Membro",
+  membro: "Perfil do membro",
+  tarefas: "Minhas tarefas",
 };
 
 function openMobileSidebar() {
@@ -804,8 +846,91 @@ const VIEWS = {
   mensagens: viewMessages,
   portfolio: viewPortfolio,
   configuracoes: viewSettings,
+  membros: viewMembers,
+  membro: viewMember,
+  tarefas: viewTasks,
 };
 let ROUTE_TOKEN = 0;
+
+const PAGE_PERMISSIONS = {
+  projetos: "projects",
+  projeto: "projects",
+  fila: "waitlist",
+  clientes: "clients",
+  cliente: "clients",
+  contratos: "contracts",
+  contrato: "contracts",
+  financeiro: "finance",
+  mensagens: "messages",
+  portfolio: "portfolio",
+};
+
+const WRITE_ACTIONS = {
+  projects: ["proj-new", "proj-edit", "proj-arch", "proj-del", "stage-del"],
+  waitlist: ["wl-new", "wl-edit", "wl-del", "wl-up", "wl-down", "wl-move"],
+  clients: ["cli-new", "cli-edit", "cli-arch", "cli-del"],
+  contracts: ["con-new", "con-edit", "con-arch", "con-del", "file-del"],
+  finance: [
+    "rec-new",
+    "rec-edit",
+    "rec-del",
+    "rec-pay",
+    "exp-new",
+    "exp-edit",
+    "exp-del",
+    "file-del",
+  ],
+  messages: ["msg-del"],
+  portfolio: ["pf-new", "pf-edit", "pf-del", "pf-up", "pf-down", "pf-pub"],
+};
+
+function hasModuleAccess(module, level = "read") {
+  if (MEMBER_CONTEXT.isAdmin) return true;
+  const permission = MEMBER_CONTEXT.profile?.permissions?.[module];
+  return Boolean(permission && (permission[level] || (level === "read" && permission.write)));
+}
+
+function canOpenPage(page) {
+  if (MEMBER_CONTEXT.isAdmin) return page !== "tarefas";
+  if (page === "tarefas") return true;
+  if (page === "membros" || page === "membro" || page === "visao-geral" || page === "configuracoes") {
+    return false;
+  }
+  const module = PAGE_PERMISSIONS[page];
+  return Boolean(module && hasModuleAccess(module));
+}
+
+function updateNavigation() {
+  $$("[data-admin-only]").forEach((el) => {
+    el.hidden = !MEMBER_CONTEXT.isAdmin;
+  });
+  $$("[data-member-only]").forEach((el) => {
+    el.hidden = MEMBER_CONTEXT.isAdmin;
+  });
+  $$("[data-permission]").forEach((el) => {
+    el.hidden = !MEMBER_CONTEXT.isAdmin && !hasModuleAccess(el.dataset.permission);
+  });
+}
+
+function enforceModuleControls(page) {
+  const module = PAGE_PERMISSIONS[page];
+  if (!module) return;
+  if (module === "waitlist" && !hasModuleAccess("projects", "write")) {
+    $$('[data-act="wl-move"]', MAIN).forEach((button) => {
+      button.hidden = true;
+    });
+  }
+  if (hasModuleAccess(module, "write")) return;
+  const actions = WRITE_ACTIONS[module] || [];
+  $$("[data-act]", MAIN).forEach((button) => {
+    if (actions.includes(button.dataset.act)) button.hidden = true;
+  });
+  if (module === "projects") {
+    $$('[data-submit="stage-add"]', MAIN).forEach((form) => {
+      form.hidden = true;
+    });
+  }
+}
 
 async function route() {
   if ($("#screen-app").hidden) return;
@@ -814,11 +939,14 @@ async function route() {
     .replace(/^#\/?/, "")
     .split("/")
     .map(decodeURIComponent);
-  const page = VIEWS[parts[0]] ? parts[0] : "visao-geral";
+  let page = VIEWS[parts[0]] ? parts[0] : "visao-geral";
+  if (!canOpenPage(page)) {
+    page = MEMBER_CONTEXT.isAdmin ? "visao-geral" : "tarefas";
+    history.replaceState(null, "", `#/` + page);
+  }
   const id = parts[1] || "";
   if (MOBILE_PAGE_TITLE) {
-    MOBILE_PAGE_TITLE.textContent =
-      PAGE_TITLES[parts[0]] || PAGE_TITLES[page] || "Painel";
+    MOBILE_PAGE_TITLE.textContent = PAGE_TITLES[page] || "Painel";
   }
   $$("[data-nav]").forEach((a) =>
     a.classList.toggle("on", a.dataset.nav === page),
@@ -838,6 +966,7 @@ async function route() {
     await loadFinance();
     if (token !== ROUTE_TOKEN) return;
     await VIEWS[page](MAIN, id, parts[2] || "");
+    enforceModuleControls(page);
   } catch (e) {
     if (token === ROUTE_TOKEN)
       MAIN.innerHTML = `<div class="notice bad">${esc(friendly(e))}</div>`;
@@ -953,7 +1082,7 @@ async function viewOverview(main) {
       ${kpi("Receita mensal recorrente", brl(mrr))}
     </div>
     <div class="two-col">
-      <div class="card"><h2>Receitas e despesas · últimos 6 meses</h2>${barChart(months, recvBy, expBy)}</div>
+      <div class="card"><h2>Receitas e despesas · últimos 6 meses</h2>${lineChart(months, recvBy, expBy)}</div>
       <div class="card"><h2>Próximos vencimentos</h2>
         ${
           dues.length
@@ -2358,7 +2487,7 @@ async function viewMessages(main, openId) {
       (r) =>
         `<div class="row-actions" style="margin:0">
           <button class="ghost sm" data-act="msg-open" data-id="${r.id}">Abrir</button>
-          <button class="danger sm" data-act="msg-del" data-id="${r.id}">Excluir</button>
+          ${hasModuleAccess("messages", "write") ? `<button class="danger sm" data-act="msg-del" data-id="${r.id}">Excluir</button>` : ""}
         </div>`,
     );
   };
@@ -2384,6 +2513,9 @@ async function viewMessages(main, openId) {
 }
 
 function openMessage(m) {
+  const canEdit = hasModuleAccess("messages", "write");
+  const canConvert =
+    canEdit && hasModuleAccess("clients", "write");
   const digits = String(m.phone || "").replace(/\D/g, "");
   const wa =
     digits.length >= 10
@@ -2406,7 +2538,7 @@ function openMessage(m) {
       <button class="ghost sm" type="button" data-copy="${esc(m.phone)}">Copiar telefone</button>
       ${wa ? `<a class="btn sm" href="${wa}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp</a>` : ""}
     </div>
-    <form class="form" id="msg-form" novalidate>
+    ${canEdit ? `<form class="form" id="msg-form" novalidate>
       <div class="field full"><label for="m-status">Situação</label>
         <select id="m-status" name="status">${MSG_STATUS.map((s) => `<option ${s === m.status ? "selected" : ""}>${s}</option>`).join("")}</select></div>
       <div class="field full"><label for="m-notes">Anotações internas</label>
@@ -2416,21 +2548,22 @@ function openMessage(m) {
         <button type="submit" class="ghost">Salvar</button>
         <button type="button" class="danger" data-del-msg="${m.id}">Excluir mensagem</button>
       </div>
-    </form>
+    </form>` : `<dl class="dl"><dt>Situação</dt><dd>${badge(m.status)}</dd><dt>Anotações internas</dt><dd>${esc(m.internal_notes || "—")}</dd></dl>`}
     <div style="margin-top:18px">
       <h3>Converter em cliente</h3>
       ${
         m.converted_client_id
           ? `<p class="muted">Esta solicitação já foi convertida. <a href="#/cliente/${m.converted_client_id}">Abrir cliente</a></p>`
-          : `<div class="row-actions">
+          : canConvert ? `<div class="row-actions">
              <select id="m-dest" style="width:auto">
                <option value="Nenhum">Somente cliente</option>
-               <option value="Fila de espera">Cliente + item na fila de espera</option>
-               <option value="Projeto">Cliente + projeto</option>
+               ${hasModuleAccess("waitlist", "write") ? '<option value="Fila de espera">Cliente + item na fila de espera</option>' : ""}
+               ${hasModuleAccess("projects", "write") ? '<option value="Projeto">Cliente + projeto</option>' : ""}
              </select>
              <button class="btn-primary" type="button" data-convert>Converter</button>
            </div>
            <p class="hint">Se já existir um cliente com o mesmo e-mail, ele será reaproveitado.</p>`
+          : '<p class="muted">Você não tem permissão para converter solicitações em clientes.</p>'
       }
     </div>`;
   openModal(`Solicitação de ${m.name}`, html, (wrap, close) => {
@@ -2445,7 +2578,7 @@ function openMessage(m) {
         }
         return;
       }
-      if (e.target.closest("[data-del-msg]")) {
+      if (canEdit && e.target.closest("[data-del-msg]")) {
         if (!confirm("Excluir esta mensagem permanentemente?")) return;
         try {
           const { error } = await sb.from("messages").delete().eq("id", m.id);
@@ -2458,7 +2591,7 @@ function openMessage(m) {
         }
         return;
       }
-      if (e.target.closest("[data-convert]")) {
+      if (canConvert && e.target.closest("[data-convert]")) {
         const dest = $("#m-dest", wrap).value;
         if (!confirm("Converter esta solicitação em cliente?")) return;
         try {
@@ -2475,7 +2608,7 @@ function openMessage(m) {
         }
       }
     });
-    $("#msg-form", wrap).addEventListener("submit", async (e) => {
+    if (canEdit) $("#msg-form", wrap).addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = e.target;
       try {
@@ -2581,6 +2714,268 @@ async function viewPortfolio(main) {
   );
 }
 
+/* ===================== Membros e tarefas ===================== */
+const MEMBER_MODULES = {
+  projects: "Projetos",
+  waitlist: "Fila de espera",
+  clients: "Clientes",
+  contracts: "Contratos",
+  finance: "Financeiro",
+  messages: "Mensagens",
+  portfolio: "Portfólio",
+};
+const MEMBER_ROLES = [
+  "Financeiro",
+  "Portfólio",
+  "Projetos",
+  "Fila de espera",
+  "Clientes",
+  "Contratos",
+  "Atendimento",
+  "Personalizada",
+];
+const ROLE_PERMISSIONS = {
+  Financeiro: {
+    finance: { read: true, write: true },
+    clients: { read: true },
+    projects: { read: true },
+    contracts: { read: true },
+  },
+  Portfólio: { portfolio: { read: true, write: true } },
+  Projetos: {
+    projects: { read: true, write: true },
+    clients: { read: true },
+    waitlist: { read: true },
+  },
+  "Fila de espera": {
+    waitlist: { read: true, write: true },
+    clients: { read: true },
+    projects: { read: true },
+  },
+  Clientes: { clients: { read: true, write: true } },
+  Contratos: {
+    contracts: { read: true, write: true },
+    clients: { read: true },
+    projects: { read: true },
+  },
+  Atendimento: {
+    messages: { read: true, write: true },
+    clients: { read: true, write: true },
+    waitlist: { read: true },
+  },
+};
+
+function accessOptions(value) {
+  return `<option value="" ${!value ? "selected" : ""}>Sem acesso</option>
+    <option value="read" ${value && !value.write ? "selected" : ""}>Visualiza</option>
+    <option value="write" ${value && value.write ? "selected" : ""}>Visualiza e altera</option>`;
+}
+
+function memberForm(member) {
+  const permissions = member?.permissions || {};
+  const roleOptions = MEMBER_ROLES.map(
+    (role) => `<option value="${esc(role)}" ${(member?.job_title || "Personalizada") === role ? "selected" : ""}>${esc(role)}</option>`,
+  );
+  if (member?.job_title && !MEMBER_ROLES.includes(member.job_title)) {
+    roleOptions.unshift(`<option value="${esc(member.job_title)}" selected>${esc(member.job_title)}</option>`);
+  }
+  openModal(
+    member ? "Editar membro" : "Adicionar membro",
+    `<form class="form" data-member-form>
+      <div class="field"><label for="member-name">Nome</label><input id="member-name" name="name" required minlength="2" maxlength="120" value="${esc(member?.name || "")}"></div>
+      <div class="field"><label for="member-title">Função</label><select id="member-title" name="job_title" required>${roleOptions.join("")}</select></div>
+      <div class="field"><label for="member-email">E-mail de acesso</label><input id="member-email" name="email" type="email" required value="${esc(member?.email || "")}"></div>
+      <div class="field"><label for="member-password">${member ? "Nova senha (opcional)" : "Senha inicial"}</label><input id="member-password" name="password" type="password" minlength="10" ${member ? "" : "required"} autocomplete="new-password"><small class="hint">Mínimo de 10 caracteres. Você poderá redefini-la depois.</small></div>
+      <div class="field full"><strong>Acessos e permissões</strong><small class="hint">Visão geral e Configurações são exclusivas da conta administradora.</small></div>
+      ${Object.entries(MEMBER_MODULES).map(([key, label]) => `<div class="field"><label for="permission-${key}">${esc(label)}</label><select id="permission-${key}" name="permission-${key}">${accessOptions(permissions[key])}</select></div>`).join("")}
+      <div class="form-msg" role="alert"></div>
+      <div class="form-actions"><button class="ghost" type="button" data-close>Cancelar</button><button class="btn-primary" type="submit">${member ? "Salvar alterações" : "Criar acesso"}</button></div>
+    </form>`,
+    (wrap, close) => {
+      const form = $("[data-member-form]", wrap);
+      const role = $('[name="job_title"]', form);
+      role.addEventListener("change", () => {
+        const preset = ROLE_PERMISSIONS[role.value];
+        if (!preset) return;
+        Object.keys(MEMBER_MODULES).forEach((key) => {
+          const permission = $(`[name="permission-${key}"]`, form);
+          permission.value = preset[key]?.write ? "write" : preset[key]?.read ? "read" : "";
+        });
+      });
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const message = $(".form-msg", form);
+        const button = $('button[type="submit"]', form);
+        const values = new FormData(form);
+        const selected = {};
+        Object.keys(MEMBER_MODULES).forEach((key) => {
+          const level = values.get(`permission-${key}`);
+          if (level) selected[key] = { read: true, ...(level === "write" ? { write: true } : {}) };
+        });
+        const payload = {
+          action: member ? "update" : "create",
+          name: String(values.get("name") || "").trim(),
+          job_title: String(values.get("job_title") || ""),
+          email: String(values.get("email") || "").trim(),
+          password: String(values.get("password") || ""),
+          permissions: selected,
+        };
+        if (member) payload.user_id = member.user_id;
+        button.disabled = true;
+        try {
+          await invokeMemberAdmin(payload);
+          close();
+          toast(member ? "Membro atualizado." : "Membro adicionado.");
+          await route();
+        } catch (error) {
+          message.textContent = friendly(error);
+          button.disabled = false;
+        }
+      });
+    },
+  );
+}
+
+async function invokeMemberAdmin(body) {
+  const { data, error } = await sb.functions.invoke("member-admin", { body });
+  if (error) {
+    if (error.context instanceof Response) {
+      const details = await error.context.json();
+      throw new Error(details.error || error.message);
+    }
+    throw error;
+  }
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+async function viewMembers(main) {
+  const [members, tasks] = await Promise.all([
+    q(sb.from("members").select("*").order("name")),
+    q(sb.from("member_tasks").select("member_id,status")),
+  ]);
+  const stats = new Map();
+  tasks.forEach((task) => {
+    const item = stats.get(task.member_id) || { pending: 0, completed: 0 };
+    item[task.status] += 1;
+    stats.set(task.member_id, item);
+  });
+  shell(
+    main,
+    "Add. Membro",
+    '<button class="btn-primary" data-act="member-new">+ Adicionar membro</button>',
+    `<p class="muted">Crie os acessos da equipe e defina, módulo por módulo, quem pode visualizar ou alterar informações. Visão geral e Configurações ficam restritas a você.</p>
+    ${table(
+      [
+        { l: "Membro", f: (member) => `<a href="#/membro/${member.user_id}">${esc(member.name)}</a>` },
+        { l: "Função", f: (member) => esc(member.job_title) },
+        { l: "E-mail", f: (member) => esc(member.email) },
+        { l: "Tarefas", f: (member) => `${stats.get(member.user_id)?.completed || 0} concluídas · ${stats.get(member.user_id)?.pending || 0} pendentes` },
+        { l: "Acessos", f: (member) => Object.keys(member.permissions || {}).map((key) => MEMBER_MODULES[key]).filter(Boolean).join(", ") || "Nenhum" },
+      ],
+      members,
+      (member) => `<a class="ghost sm btn" href="#/membro/${member.user_id}">Ver perfil</a>
+        <button class="ghost sm" data-act="member-edit" data-id="${member.user_id}">Editar</button>
+        <button class="danger sm" data-act="member-del" data-id="${member.user_id}">Remover</button>`,
+    )}`,
+  );
+}
+
+async function viewMember(main, id) {
+  const member = await q(
+    sb.from("members").select("*").eq("user_id", id).single(),
+  );
+  const tasks = await q(
+    sb.from("member_tasks").select("*").eq("member_id", id).order("created_at", { ascending: false }),
+  );
+  shell(
+    main,
+    member.name,
+    `<button class="ghost" data-act="member-edit" data-id="${member.user_id}">Editar acesso</button>
+    <button class="btn-primary" data-act="task-new" data-id="${member.user_id}">+ Enviar tarefa</button>
+    <button class="danger sm" data-act="member-del" data-id="${member.user_id}">Remover membro</button>
+    <a class="ghost btn sm" href="#/membros">Voltar</a>`,
+    `<div class="card"><h2>Perfil do membro</h2><dl class="dl">
+      <dt>Função</dt><dd>${esc(member.job_title)}</dd>
+      <dt>E-mail</dt><dd>${esc(member.email)}</dd>
+      <dt>Acessos</dt><dd>${Object.entries(member.permissions || {}).map(([key, value]) => `${esc(MEMBER_MODULES[key] || key)} (${value.write ? "visualiza e altera" : "visualiza"})`).join(", ") || "Nenhum"}</dd>
+    </dl></div>
+    ${section("Tarefas", tasks.length ? `<ul class="feed">${tasks.map((task) => `<li><span><strong>${esc(task.title)}</strong>${task.description ? `<br><span class="muted small">${esc(task.description)}</span>` : ""}</span>    <span>${badge(task.status === "completed" ? "✓ Concluída" : "Pendente")}${task.completed_at ? `<time>${fmtDateTime(task.completed_at)}</time>` : ""}</span></li>`).join("")}</ul>` : '<p class="muted">Nenhuma tarefa enviada ainda.</p>')}`,
+  );
+}
+
+async function viewTasks(main) {
+  const memberId = MEMBER_CONTEXT.profile.user_id;
+  const tasks = await q(
+    sb.from("member_tasks").select("*").eq("member_id", memberId).order("created_at", { ascending: false }),
+  );
+  shell(
+    main,
+    "Minhas tarefas",
+    "",
+    `<p class="muted">As tarefas são visíveis somente para você e para a administração.</p>
+    ${tasks.length ? `<div class="task-list">${tasks.map((task) => `<article class="card task-card ${task.status === "completed" ? "task-completed" : ""}">
+      <div><h2>${esc(task.title)}</h2>${task.description ? `<p>${esc(task.description)}</p>` : ""}<small class="muted">Recebida em ${fmtDateTime(task.created_at)}</small>${task.completed_at ? `<small class="muted"> · Concluída em ${fmtDateTime(task.completed_at)}</small>` : ""}</div>
+      ${task.status === "pending" ? `<button class="btn-primary" data-act="task-complete" data-id="${task.id}">Marcar como concluída</button>` : badge("✓ Concluída")}
+    </article>`).join("")}</div>` : '<div class="empty">Você ainda não tem tarefas.</div>'}`,
+  );
+}
+
+function taskForm(memberId) {
+  const members = MEMBER_CONTEXT.isAdmin
+    ? null
+    : [MEMBER_CONTEXT.profile];
+  if (!members) {
+    q(sb.from("members").select("user_id,name").order("name"))
+      .then((rows) => openTaskForm(rows, memberId))
+      .catch((error) => toast(friendly(error), false));
+    return;
+  }
+  openTaskForm(members, memberId);
+}
+
+function openTaskForm(members, memberId) {
+  openModal(
+    "Enviar tarefa",
+    `<form class="form" data-task-form>
+      <div class="field"><label for="task-member">Membro</label><select id="task-member" name="member_id" required>${members.map((member) => `<option value="${member.user_id}" ${member.user_id === memberId ? "selected" : ""}>${esc(member.name)}</option>`).join("")}</select></div>
+      <div class="field"><label for="task-title">Tarefa</label><input id="task-title" name="title" required minlength="2" maxlength="160"></div>
+      <div class="field full"><label for="task-description">Detalhes</label><textarea id="task-description" name="description" rows="4"></textarea></div>
+      <div class="form-msg" role="alert"></div>
+      <div class="form-actions"><button type="button" class="ghost" data-close>Cancelar</button><button type="submit" class="btn-primary">Enviar tarefa</button></div>
+    </form>`,
+    (wrap, close) => {
+      $("[data-task-form]", wrap).addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const message = $(".form-msg", form);
+        const button = $('button[type="submit"]', form);
+        const values = new FormData(form);
+        const { data: { user }, error: userError } = await sb.auth.getUser();
+        if (userError || !user) {
+          message.textContent = friendly(userError || new Error("Sessão expirada."));
+          return;
+        }
+        button.disabled = true;
+        const { error } = await sb.from("member_tasks").insert({
+          member_id: values.get("member_id"),
+          title: String(values.get("title") || "").trim(),
+          description: String(values.get("description") || "").trim() || null,
+          created_by: user.id,
+        });
+        if (error) {
+          message.textContent = friendly(error);
+          button.disabled = false;
+          return;
+        }
+        close();
+        toast("Tarefa enviada.");
+        await route();
+      });
+    },
+  );
+}
+
 /* ===================== Configurações ===================== */
 const SETTINGS_FIELDS = [
   { k: "company_name", l: "Nome da empresa" },
@@ -2631,6 +3026,31 @@ async function viewSettings(main) {
 }
 
 /* ===================== Ações globais (botões) ===================== */
+GACT["member-new"] = () => memberForm();
+GACT["member-edit"] = (id) => {
+  q(sb.from("members").select("*").eq("user_id", id).single())
+    .then((member) => memberForm(member))
+    .catch((error) => toast(friendly(error), false));
+};
+GACT["member-del"] = (id) => {
+  if (!confirm("Remover este membro? A conta será excluída e todas as tarefas dele serão removidas permanentemente.")) return;
+  invokeMemberAdmin({ action: "delete", user_id: id })
+    .then(async () => {
+      toast("Membro removido.");
+      if (location.hash === `#/membro/${id}`) {
+        history.replaceState(null, "", "#/membros");
+      }
+      await route();
+    })
+    .catch((error) => toast(friendly(error), false));
+};
+GACT["task-new"] = (id) => taskForm(id);
+GACT["task-complete"] = (id) =>
+  run(async () => {
+    const { error } = await sb.rpc("complete_my_task", { p_task: id });
+    if (error) throw error;
+  }, "Tarefa marcada como concluída.");
+
 GACT["proj-new"] = () => projectForm();
 GACT["proj-edit"] = (id) => projectForm(DB.projects.find((x) => x.id === id));
 GACT["proj-arch"] = (id) => toggleArchive("projects", id);
@@ -2707,7 +3127,7 @@ GACT["rec-hist"] = (id) => {
             (
               p,
             ) => `<tr><td>${fmtDate(p.paid_on)}</td><td>${esc(p.method)}</td><td class="money">${brl(p.amount)}</td>
-          <td class="actions-col"><button class="danger sm" type="button" data-pay-del="${p.id}">Excluir</button></td></tr>`,
+          ${hasModuleAccess("finance", "write") ? `<td class="actions-col"><button class="danger sm" type="button" data-pay-del="${p.id}">Excluir</button></td>` : ""}</tr>`,
           )
           .join("")}
         </tbody></table></div>`

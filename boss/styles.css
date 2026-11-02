@@ -524,6 +524,36 @@ select option {
   border-radius: var(--radius);
   padding: 18px;
 }
+.task-list {
+  display: grid;
+  gap: 12px;
+}
+.task-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.task-card h2 {
+  font-size: 1.05rem;
+  margin-bottom: 6px;
+}
+.task-card p {
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+}
+.task-card small {
+  display: inline-block;
+}
+.task-completed {
+  border-color: rgba(29, 158, 91, 0.35);
+}
+@media (max-width: 600px) {
+  .task-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -630,12 +660,27 @@ select option {
   fill: var(--muted);
   font-size: 12px;
 }
-.chart .bar-in {
+.chart .grid-line {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.chart .chart-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.chart .line-in {
+  stroke: var(--blue);
+}
+.chart .line-out {
+  stroke: #e05656;
+}
+.chart .chart-point.line-in {
   fill: var(--blue);
 }
-.chart .bar-out {
+.chart .chart-point.line-out {
   fill: #e05656;
-  opacity: 0.85;
 }
 .legend {
   display: flex;

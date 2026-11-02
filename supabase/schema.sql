@@ -8,6 +8,29 @@ create table if not exists public.admins (
   email text primary key
 );
 
+create table if not exists public.members (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email text not null unique,
+  name text not null check (char_length(name) between 2 and 120),
+  job_title text not null check (char_length(job_title) between 2 and 80),
+  permissions jsonb not null default '{}'::jsonb
+    check (jsonb_typeof(permissions) = 'object'),
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.member_tasks (
+  id uuid primary key default gen_random_uuid(),
+  member_id uuid not null references public.members(user_id) on delete cascade,
+  title text not null check (char_length(title) between 2 and 160),
+  description text,
+  status text not null default 'pending' check (status in ('pending','completed')),
+  created_by uuid references auth.users(id) on delete set null,
+  completed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 -- Retorna verdadeiro somente para o e-mail do usuário logado que está em public.admins.
 create or replace function public.is_admin()
 returns boolean
@@ -20,6 +43,61 @@ as $$
     select 1 from public.admins a
     where lower(a.email) = lower(auth.jwt() ->> 'email')
   );
+$$;
+
+create or replace function public.is_active_member()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.members m
+    where m.user_id = auth.uid() and m.active
+  );
+$$;
+
+create or replace function public.has_module_access(p_module text, p_level text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.is_admin() or exists (
+    select 1 from public.members m
+    where m.user_id = auth.uid()
+      and m.active
+      and (
+        (p_level = 'read' and (
+          m.permissions -> p_module ->> 'read' = 'true'
+          or m.permissions -> p_module ->> 'write' = 'true'
+        ))
+        or (p_level = 'write' and m.permissions -> p_module ->> 'write' = 'true')
+      )
+  );
+$$;
+
+create or replace function public.complete_my_task(p_task uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_active_member() then
+    raise exception 'Acesso não autorizado.';
+  end if;
+
+  update public.member_tasks
+    set status = 'completed', completed_at = coalesce(completed_at, now())
+    where id = p_task and member_id = auth.uid();
+
+  if not found then
+    raise exception 'Tarefa não encontrada.';
+  end if;
+end;
 $$;
 
 create or replace function public.set_updated_at()
@@ -308,11 +386,20 @@ declare
   pid uuid;
   next_priority integer;
 begin
-  if not public.is_admin() then
-    raise exception 'Sem permissão para esta ação.';
+  if not public.has_module_access('messages', 'write')
+     or not public.has_module_access('clients', 'write') then
+    raise exception 'Sem permissão para converter solicitações.';
   end if;
   if p_destination not in ('Nenhum','Fila de espera','Projeto') then
     raise exception 'Destino inválido.';
+  end if;
+  if p_destination = 'Fila de espera'
+     and not public.has_module_access('waitlist', 'write') then
+    raise exception 'Sem permissão para usar a fila de espera.';
+  end if;
+  if p_destination = 'Projeto'
+     and not public.has_module_access('projects', 'write') then
+    raise exception 'Sem permissão para criar projetos.';
   end if;
 
   select * into m from public.messages where id = p_message for update;
@@ -366,8 +453,9 @@ declare
   client_name text;
   pid uuid;
 begin
-  if not public.is_admin() then
-    raise exception 'Sem permissão para esta ação.';
+  if not public.has_module_access('waitlist', 'write')
+     or not public.has_module_access('projects', 'write') then
+    raise exception 'Sem permissão para mover itens da fila para projetos.';
   end if;
 
   select * into w from public.waitlist where id = p_item for update;
@@ -394,12 +482,17 @@ $$;
 
 revoke execute on function public.convert_message(uuid, text) from anon;
 revoke execute on function public.move_waitlist_to_project(uuid) from anon;
+revoke execute on function public.complete_my_task(uuid) from anon;
 
 -- ===================================================================
 -- 11. GATILHOS (atualização de data e histórico)
 -- ===================================================================
 drop trigger if exists clients_updated on public.clients;
 create trigger clients_updated before update on public.clients
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists members_updated on public.members;
+create trigger members_updated before update on public.members
   for each row execute function public.set_updated_at();
 
 drop trigger if exists projects_updated on public.projects;
@@ -492,6 +585,8 @@ on conflict (id) do nothing;
 -- 13. REGRAS DE ACESSO (RLS)
 -- ===================================================================
 alter table public.admins enable row level security;
+alter table public.members enable row level security;
+alter table public.member_tasks enable row level security;
 alter table public.clients enable row level security;
 alter table public.projects enable row level security;
 alter table public.project_stages enable row level security;
@@ -511,37 +606,127 @@ drop policy if exists "admin total clientes" on public.clients;
 create policy "admin total clientes" on public.clients
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "membro lê próprio perfil" on public.members;
+create policy "membro lê próprio perfil" on public.members
+  for select to authenticated using (user_id = auth.uid() and active);
+
+drop policy if exists "admin gerencia membros" on public.members;
+create policy "admin gerencia membros" on public.members
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "admin gerencia tarefas" on public.member_tasks;
+create policy "admin gerencia tarefas" on public.member_tasks
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "membro lê próprias tarefas" on public.member_tasks;
+create policy "membro lê próprias tarefas" on public.member_tasks
+  for select to authenticated using (
+    member_id = auth.uid() and public.is_active_member()
+  );
+
 drop policy if exists "admin total projetos" on public.projects;
 create policy "admin total projetos" on public.projects
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "membro lê projetos" on public.projects;
+create policy "membro lê projetos" on public.projects
+  for select to authenticated using (public.has_module_access('projects', 'read'));
+drop policy if exists "membro edita projetos" on public.projects;
+create policy "membro edita projetos" on public.projects
+  for all to authenticated using (public.has_module_access('projects', 'write'))
+  with check (public.has_module_access('projects', 'write'));
 
 drop policy if exists "admin total etapas" on public.project_stages;
 create policy "admin total etapas" on public.project_stages
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "membro lê etapas" on public.project_stages;
+create policy "membro lê etapas" on public.project_stages
+  for select to authenticated using (public.has_module_access('projects', 'read'));
+drop policy if exists "membro edita etapas" on public.project_stages;
+create policy "membro edita etapas" on public.project_stages
+  for all to authenticated using (public.has_module_access('projects', 'write'))
+  with check (public.has_module_access('projects', 'write'));
+
 drop policy if exists "admin total fila" on public.waitlist;
 create policy "admin total fila" on public.waitlist
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "membro lê fila" on public.waitlist;
+create policy "membro lê fila" on public.waitlist
+  for select to authenticated using (public.has_module_access('waitlist', 'read'));
+drop policy if exists "membro edita fila" on public.waitlist;
+create policy "membro edita fila" on public.waitlist
+  for all to authenticated using (public.has_module_access('waitlist', 'write'))
+  with check (public.has_module_access('waitlist', 'write'));
 
 drop policy if exists "admin total contratos" on public.contracts;
 create policy "admin total contratos" on public.contracts
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "membro lê contratos" on public.contracts;
+create policy "membro lê contratos" on public.contracts
+  for select to authenticated using (public.has_module_access('contracts', 'read'));
+drop policy if exists "membro edita contratos" on public.contracts;
+create policy "membro edita contratos" on public.contracts
+  for all to authenticated using (public.has_module_access('contracts', 'write'))
+  with check (public.has_module_access('contracts', 'write'));
+
 drop policy if exists "admin total anexos" on public.contract_files;
 create policy "admin total anexos" on public.contract_files
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "membro lê anexos de contrato" on public.contract_files;
+create policy "membro lê anexos de contrato" on public.contract_files
+  for select to authenticated using (public.has_module_access('contracts', 'read'));
+drop policy if exists "membro gerencia anexos de contrato" on public.contract_files;
+create policy "membro gerencia anexos de contrato" on public.contract_files
+  for all to authenticated using (public.has_module_access('contracts', 'write'))
+  with check (public.has_module_access('contracts', 'write'));
 
 drop policy if exists "admin total cobranças" on public.receivables;
 create policy "admin total cobranças" on public.receivables
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "membro lê cobranças" on public.receivables;
+create policy "membro lê cobranças" on public.receivables
+  for select to authenticated using (public.has_module_access('finance', 'read'));
+drop policy if exists "membro edita cobranças" on public.receivables;
+create policy "membro edita cobranças" on public.receivables
+  for all to authenticated using (public.has_module_access('finance', 'write'))
+  with check (public.has_module_access('finance', 'write'));
+
 drop policy if exists "admin total pagamentos" on public.payments;
 create policy "admin total pagamentos" on public.payments
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "membro lê pagamentos" on public.payments;
+create policy "membro lê pagamentos" on public.payments
+  for select to authenticated using (public.has_module_access('finance', 'read'));
+drop policy if exists "membro edita pagamentos" on public.payments;
+create policy "membro edita pagamentos" on public.payments
+  for all to authenticated using (public.has_module_access('finance', 'write'))
+  with check (public.has_module_access('finance', 'write'));
+
 drop policy if exists "admin total despesas" on public.expenses;
 create policy "admin total despesas" on public.expenses
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "membro lê despesas" on public.expenses;
+create policy "membro lê despesas" on public.expenses
+  for select to authenticated using (public.has_module_access('finance', 'read'));
+drop policy if exists "membro edita despesas" on public.expenses;
+create policy "membro edita despesas" on public.expenses
+  for all to authenticated using (public.has_module_access('finance', 'write'))
+  with check (public.has_module_access('finance', 'write'));
+
+drop policy if exists "membro lê clientes" on public.clients;
+create policy "membro lê clientes" on public.clients
+  for select to authenticated using (public.has_module_access('clients', 'read'));
+drop policy if exists "membro edita clientes" on public.clients;
+create policy "membro edita clientes" on public.clients
+  for all to authenticated using (public.has_module_access('clients', 'write'))
+  with check (public.has_module_access('clients', 'write'));
 
 drop policy if exists "admin lê histórico" on public.activity_log;
 create policy "admin lê histórico" on public.activity_log
@@ -561,9 +746,21 @@ drop policy if exists "admin atualiza solicitações" on public.messages;
 create policy "admin atualiza solicitações" on public.messages
   for update to authenticated using (public.is_admin()) with check (public.is_admin());
 
+drop policy if exists "membro lê solicitações" on public.messages;
+create policy "membro lê solicitações" on public.messages
+  for select to authenticated using (public.has_module_access('messages', 'read'));
+drop policy if exists "membro atualiza solicitações" on public.messages;
+create policy "membro atualiza solicitações" on public.messages
+  for update to authenticated using (public.has_module_access('messages', 'write'))
+  with check (public.has_module_access('messages', 'write'));
+
 drop policy if exists "admin exclui solicitações" on public.messages;
 create policy "admin exclui solicitações" on public.messages
   for delete to authenticated using (public.is_admin());
+
+drop policy if exists "membro exclui solicitações" on public.messages;
+create policy "membro exclui solicitações" on public.messages
+  for delete to authenticated using (public.has_module_access('messages', 'write'));
 
 -- Portfólio: público vê apenas itens publicados.
 drop policy if exists "portfólio público" on public.portfolio;
@@ -573,6 +770,14 @@ create policy "portfólio público" on public.portfolio
 drop policy if exists "admin gerencia portfólio" on public.portfolio;
 create policy "admin gerencia portfólio" on public.portfolio
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "membro lê portfólio" on public.portfolio;
+create policy "membro lê portfólio" on public.portfolio
+  for select to authenticated using (public.has_module_access('portfolio', 'read'));
+drop policy if exists "membro gerencia portfólio" on public.portfolio;
+create policy "membro gerencia portfólio" on public.portfolio
+  for all to authenticated using (public.has_module_access('portfolio', 'write'))
+  with check (public.has_module_access('portfolio', 'write'));
 
 -- Configurações institucionais: leitura pública; alteração somente administrador.
 drop policy if exists "configurações públicas" on public.settings;
@@ -591,17 +796,29 @@ create policy "admin gerencia configurações" on public.settings
 drop policy if exists "admin lê arquivos privados" on storage.objects;
 create policy "admin lê arquivos privados" on storage.objects
   for select to authenticated
-  using (bucket_id in ('contract-files','expense-receipts') and public.is_admin());
+  using (
+    (bucket_id in ('contract-files','expense-receipts') and public.is_admin())
+    or (bucket_id = 'contract-files' and public.has_module_access('contracts', 'read'))
+    or (bucket_id = 'expense-receipts' and public.has_module_access('finance', 'read'))
+  );
 
 drop policy if exists "admin envia arquivos privados" on storage.objects;
 create policy "admin envia arquivos privados" on storage.objects
   for insert to authenticated
-  with check (bucket_id in ('contract-files','expense-receipts') and public.is_admin());
+  with check (
+    (bucket_id in ('contract-files','expense-receipts') and public.is_admin())
+    or (bucket_id = 'contract-files' and public.has_module_access('contracts', 'write'))
+    or (bucket_id = 'expense-receipts' and public.has_module_access('finance', 'write'))
+  );
 
 drop policy if exists "admin remove arquivos privados" on storage.objects;
 create policy "admin remove arquivos privados" on storage.objects
   for delete to authenticated
-  using (bucket_id in ('contract-files','expense-receipts') and public.is_admin());
+  using (
+    (bucket_id in ('contract-files','expense-receipts') and public.is_admin())
+    or (bucket_id = 'contract-files' and public.has_module_access('contracts', 'write'))
+    or (bucket_id = 'expense-receipts' and public.has_module_access('finance', 'write'))
+  );
 
 drop policy if exists "portfólio lê imagens" on storage.objects;
 create policy "portfólio lê imagens" on storage.objects
