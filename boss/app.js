@@ -82,6 +82,7 @@ let NOTIFICATION_CHANNEL = null;
 let NOTIFICATION_STORAGE_KEY = null;
 let MESSAGE_CHECKPOINT_KEY = null;
 let NOTIFICATION_SOUND_PENDING = false;
+const MESSAGE_SOUND_NOTIFIED = new Set();
 let REALTIME_REFRESH_TIMER = null;
 let REALTIME_REFRESH_PENDING = false;
 let NOTIFICATION_AUDIO = null;
@@ -288,6 +289,29 @@ function playNotificationSound() {
   });
 }
 
+function resumeNotificationAudioFromGesture() {
+  if (!NOTIFICATION_SOUND_ENABLED) return Promise.resolve();
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return Promise.resolve();
+  if (!NOTIFICATION_AUDIO) NOTIFICATION_AUDIO = new AudioContextClass();
+  const resume =
+    NOTIFICATION_AUDIO.state === "suspended"
+      ? NOTIFICATION_AUDIO.resume()
+      : Promise.resolve();
+  return resume.then(() => {
+    if (NOTIFICATION_SOUND_PENDING) playNotificationSound();
+  });
+}
+
+function playUnreadMessageSound(messageIds) {
+  const pendingIds = [...new Set(messageIds)].filter(
+    (id) => !MESSAGE_SOUND_NOTIFIED.has(id),
+  );
+  if (!pendingIds.length || !NOTIFICATION_SOUND_ENABLED) return;
+  pendingIds.forEach((id) => MESSAGE_SOUND_NOTIFIED.add(id));
+  playNotificationSound();
+}
+
 function notifyUser(title, body, route, options = {}) {
   const notificationId = options.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   if (NOTIFICATIONS.some((notification) => notification.id === notificationId)) {
@@ -306,7 +330,16 @@ function notifyUser(title, body, route, options = {}) {
   NOTIFICATIONS = NOTIFICATIONS.slice(0, 30);
   persistNotifications();
   renderNotifications();
-  if (options.playSound !== false) playNotificationSound();
+  if (options.playSound !== false) {
+    if (
+      NOTIFICATION_SOUND_ENABLED &&
+      notification.entityId &&
+      notification.id.startsWith("message:")
+    ) {
+      MESSAGE_SOUND_NOTIFIED.add(notification.id);
+    }
+    playNotificationSound();
+  }
   if (
     options.showDesktop !== false &&
     NOTIFICATION_SOUND_ENABLED &&
@@ -352,26 +385,37 @@ async function loadMissedMessageNotifications() {
   }
 
   let added = 0;
+  const unreadMessageIds = [];
   messages.forEach((message) => {
+    const notificationId = `message:${message.id}`;
+    const existing = NOTIFICATIONS.find(
+      (notification) => notification.id === notificationId,
+    );
+    if (existing) {
+      if (!existing.read) unreadMessageIds.push(notificationId);
+      return;
+    }
     if (
       notifyUser(
         "Nova solicitação",
         `${message.name}${message.company ? ` · ${message.company}` : ""}`,
         `#/mensagens/${message.id}`,
         {
-          id: `message:${message.id}`,
+          id: notificationId,
           entityId: message.id,
           createdAt: message.created_at,
           playSound: false,
           showDesktop: false,
         },
       )
-    )
+    ) {
       added += 1;
+      unreadMessageIds.push(notificationId);
+    }
   });
   localStorage.setItem(MESSAGE_CHECKPOINT_KEY, cutoff);
+  playUnreadMessageSound(unreadMessageIds);
   if (added) {
-    playNotificationSound();
     if (
       NOTIFICATION_SOUND_ENABLED &&
       document.hidden &&
@@ -449,6 +493,13 @@ function startRealtimeNotifications(userId) {
   }
   loadStoredNotifications(userId);
   renderNotifications();
+  if (MEMBER_CONTEXT.isAdmin) {
+    playUnreadMessageSound(
+      NOTIFICATIONS.filter(
+        (notification) => notification.entityId && !notification.read,
+      ).map((notification) => notification.id),
+    );
+  }
   const channel = sb.channel(`boss-notifications-${userId}`);
   const realtimeTables = [
     ["clients", "clients", false],
@@ -649,17 +700,7 @@ $("#notifications-list").addEventListener("click", (event) => {
 });
 
 document.addEventListener("pointerdown", () => {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (NOTIFICATION_SOUND_ENABLED && !NOTIFICATION_AUDIO && AudioContextClass) {
-    NOTIFICATION_AUDIO = new AudioContextClass();
-  }
-  if (NOTIFICATION_SOUND_ENABLED && NOTIFICATION_AUDIO?.state === "suspended") {
-    NOTIFICATION_AUDIO.resume().then(() => {
-      if (NOTIFICATION_SOUND_PENDING) playNotificationSound();
-    }).catch((error) => toast(friendly(error), false));
-  } else if (NOTIFICATION_SOUND_ENABLED && NOTIFICATION_SOUND_PENDING) {
-    playNotificationSound();
-  }
+  resumeNotificationAudioFromGesture().catch((error) => toast(friendly(error), false));
 });
 
 document.addEventListener("focusout", () => {
@@ -1197,6 +1238,7 @@ async function enterApp() {
 
 $("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  resumeNotificationAudioFromGesture().catch((error) => toast(friendly(error), false));
   const email = $("#login-email").value.trim(),
     pass = $("#login-pass").value;
   if (!EMAIL_RE.test(email) || !pass) {
