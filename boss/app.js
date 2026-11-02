@@ -3217,6 +3217,11 @@ function memberForm(member) {
           toast(member ? "Membro atualizado." : "Membro adicionado.");
           await route();
         } catch (error) {
+          if (error.name === "SessionExpiredError") {
+            close();
+            authMsg("login-msg", friendly(error));
+            return;
+          }
           message.textContent = friendly(error);
           button.disabled = false;
         }
@@ -3225,12 +3230,30 @@ function memberForm(member) {
   );
 }
 
+function isInvalidRefreshToken(error) {
+  return (
+    error?.code === "refresh_token_not_found" ||
+    /invalid refresh token/i.test(error?.message || "")
+  );
+}
+
+async function expireMemberAdminSession() {
+  const { error } = await sb.auth.signOut({ scope: "local" });
+  if (error) throw error;
+  const sessionError = new Error(
+    "Sua sessão expirou. Entre novamente no painel para adicionar o membro.",
+  );
+  sessionError.name = "SessionExpiredError";
+  throw sessionError;
+}
+
 async function invokeMemberAdmin(body) {
   const { data: sessionData, error: sessionError } = await sb.auth.getSession();
-  if (sessionError) throw sessionError;
-  if (!sessionData.session) {
-    throw new Error("Sua sessão expirou. Entre novamente no painel.");
+  if (sessionError) {
+    if (isInvalidRefreshToken(sessionError)) await expireMemberAdminSession();
+    throw sessionError;
   }
+  if (!sessionData.session) await expireMemberAdminSession();
 
   let result = await sb.functions.invoke("member-admin", {
     body,
@@ -3238,14 +3261,18 @@ async function invokeMemberAdmin(body) {
   });
   if (result.error?.context instanceof Response && result.error.context.status === 401) {
     const { data, error } = await sb.auth.refreshSession();
-    if (error) throw error;
-    if (!data.session) {
-      throw new Error("Sua sessão expirou. Entre novamente no painel.");
+    if (error) {
+      if (isInvalidRefreshToken(error)) await expireMemberAdminSession();
+      throw error;
     }
+    if (!data.session) await expireMemberAdminSession();
     result = await sb.functions.invoke("member-admin", {
       body,
       headers: { Authorization: `Bearer ${data.session.access_token}` },
     });
+    if (result.error?.context instanceof Response && result.error.context.status === 401) {
+      await expireMemberAdminSession();
+    }
   }
 
   const { data, error } = result;
