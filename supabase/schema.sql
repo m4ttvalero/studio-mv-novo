@@ -313,6 +313,35 @@ create table if not exists public.settings (
   value text
 );
 
+-- Publica mensagens e tarefas no Realtime para os alertas do painel.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication where pubname = 'supabase_realtime'
+  ) then
+    raise exception 'A publicação supabase_realtime não existe.';
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'messages'
+  ) then
+    alter publication supabase_realtime add table public.messages;
+  end if;
+
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'member_tasks'
+  ) then
+    alter publication supabase_realtime add table public.member_tasks;
+  end if;
+end;
+$$;
+
 -- ===================================================================
 -- 9. HISTÓRICO DE ALTERAÇÕES
 -- ===================================================================

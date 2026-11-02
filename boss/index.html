@@ -176,6 +176,20 @@
           </a>
         </nav>
         <div class="sidebar-foot">
+          <div class="notification-controls">
+            <button id="notifications-toggle" class="ghost sm notification-button" type="button" aria-expanded="false" aria-controls="notifications-panel">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg>
+              <span>Notificações</span><span id="notifications-count" class="notification-count" hidden></span>
+            </button>
+            <button id="notification-sound-toggle" class="ghost sm notification-sound" type="button" aria-pressed="false">Ativar som e alertas</button>
+            <section id="notifications-panel" class="notification-panel" aria-label="Notificações" hidden>
+              <div class="notification-panel-head">
+                <strong>Notificações</strong>
+                <button id="notifications-read-all" class="link-btn" type="button">Marcar como lidas</button>
+              </div>
+              <ul id="notifications-list" class="notification-list"></ul>
+            </section>
+          </div>
           <div class="user-info">
             <span class="user-label">Conectado como</span>
             <span id="user-email" class="muted small user-email"></span>

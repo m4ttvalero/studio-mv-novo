@@ -77,6 +77,12 @@ const ACTION_LABEL = {
 const DB = { clients: [], projects: [], contracts: [] };
 let FIN = { receivables: [], payments: [], expenses: [] };
 let MEMBER_CONTEXT = { isAdmin: false, profile: null };
+let NOTIFICATIONS = [];
+let NOTIFICATION_CHANNEL = null;
+let NOTIFICATION_AUDIO = null;
+const NOTIFIED_TASK_COMPLETIONS = new Set();
+let NOTIFICATION_SOUND_ENABLED =
+  localStorage.getItem("boss-notification-sound") === "true";
 const CACHE = {
   clients: () => DB.clients,
   projects: () => DB.projects,
@@ -183,6 +189,237 @@ function toast(msg, ok = true) {
   setTimeout(() => t.remove(), 3800);
 }
 
+function renderNotifications() {
+  const list = $("#notifications-list");
+  const count = $("#notifications-count");
+  const unread = NOTIFICATIONS.filter((notification) => !notification.read).length;
+  count.textContent = unread > 99 ? "99+" : String(unread);
+  count.hidden = unread === 0;
+  list.innerHTML = NOTIFICATIONS.length
+    ? NOTIFICATIONS.map(
+        (notification) => `<li>
+          <button class="notification-item ${notification.read ? "" : "unread"}" type="button" data-notification-id="${notification.id}">
+            <strong>${esc(notification.title)}</strong>
+            <span>${esc(notification.body)}</span>
+            <time>${fmtDateTime(notification.createdAt)}</time>
+          </button>
+        </li>`,
+      ).join("")
+    : '<li class="notification-empty">Nenhuma notificação por enquanto.</li>';
+}
+
+function playNotificationSound() {
+  if (!NOTIFICATION_SOUND_ENABLED || !NOTIFICATION_AUDIO || NOTIFICATION_AUDIO.state !== "running") return;
+  const start = NOTIFICATION_AUDIO.currentTime;
+  [880, 660].forEach((frequency, index) => {
+    const time = start + index * 0.16;
+    const oscillator = NOTIFICATION_AUDIO.createOscillator();
+    const volume = NOTIFICATION_AUDIO.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(frequency, time);
+    volume.gain.setValueAtTime(0.0001, time);
+    volume.gain.exponentialRampToValueAtTime(0.12, time + 0.02);
+    volume.gain.exponentialRampToValueAtTime(0.0001, time + 0.13);
+    oscillator.connect(volume);
+    volume.connect(NOTIFICATION_AUDIO.destination);
+    oscillator.start(time);
+    oscillator.stop(time + 0.14);
+  });
+}
+
+function notifyUser(title, body, route) {
+  const notification = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    title,
+    body,
+    route,
+    createdAt: new Date().toISOString(),
+    read: false,
+  };
+  NOTIFICATIONS.unshift(notification);
+  NOTIFICATIONS = NOTIFICATIONS.slice(0, 30);
+  renderNotifications();
+  playNotificationSound();
+  if (
+    NOTIFICATION_SOUND_ENABLED &&
+    document.hidden &&
+    "Notification" in window &&
+    Notification.permission === "granted"
+  ) {
+    const desktop = new Notification(title, {
+      body,
+      icon: "../img/logo.png",
+      tag: notification.id,
+    });
+    desktop.onclick = () => {
+      window.focus();
+      if (route) location.hash = route;
+      desktop.close();
+    };
+  }
+}
+
+async function enableNotificationSound() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) throw new Error("Este navegador não oferece suporte a áudio.");
+  const permissionRequest =
+    "Notification" in window && Notification.permission === "default"
+      ? Notification.requestPermission()
+      : null;
+  if (!NOTIFICATION_AUDIO) NOTIFICATION_AUDIO = new AudioContextClass();
+  await NOTIFICATION_AUDIO.resume();
+  NOTIFICATION_SOUND_ENABLED = true;
+  localStorage.setItem("boss-notification-sound", "true");
+  updateNotificationControls();
+  playNotificationSound();
+  if (permissionRequest) await permissionRequest;
+  updateNotificationControls();
+}
+
+function updateNotificationControls() {
+  const button = $("#notification-sound-toggle");
+  const enabled = NOTIFICATION_SOUND_ENABLED;
+  button.textContent = enabled
+    ? !("Notification" in window)
+      ? "Som ativado · alertas indisponíveis"
+      : Notification.permission === "denied"
+        ? "Som ativado · alertas bloqueados"
+        : Notification.permission === "default"
+          ? "Som ativado · permita alertas"
+          : "Som e alertas ativados"
+    : "Ativar som e alertas";
+  button.setAttribute("aria-pressed", String(enabled));
+}
+
+function startRealtimeNotifications(userId) {
+  if (NOTIFICATION_CHANNEL) {
+    sb.removeChannel(NOTIFICATION_CHANNEL);
+    NOTIFICATION_CHANNEL = null;
+  }
+  NOTIFICATIONS = [];
+  renderNotifications();
+  const channel = sb.channel(`boss-notifications-${userId}`);
+  if (MEMBER_CONTEXT.isAdmin) {
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "messages" },
+      ({ new: message }) => {
+        if (message.status !== "Nova") return;
+        notifyUser(
+          "Nova mensagem recebida",
+          `${message.name} · ${message.company}`,
+          `#/mensagens/${message.id}`,
+        );
+      },
+    );
+    channel.on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "member_tasks" },
+      async ({ new: task, old }) => {
+        if (
+          task.status !== "completed" ||
+          old.status === "completed" ||
+          NOTIFIED_TASK_COMPLETIONS.has(task.id)
+        )
+          return;
+        NOTIFIED_TASK_COMPLETIONS.add(task.id);
+        const { data: member, error } = await sb
+          .from("members")
+          .select("name")
+          .eq("user_id", task.member_id)
+          .single();
+        if (error) {
+          toast(friendly(error), false);
+          return;
+        }
+        notifyUser(
+          "Tarefa concluída",
+          `${member.name} concluiu: ${task.title}`,
+          `#/membro/${task.member_id}`,
+        );
+      },
+    );
+  } else {
+    channel.on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "member_tasks",
+        filter: `member_id=eq.${userId}`,
+      },
+      ({ new: task }) => {
+        notifyUser(
+          "Nova tarefa recebida",
+          task.title,
+          "#/tarefas",
+        );
+      },
+    );
+  }
+  NOTIFICATION_CHANNEL = channel.subscribe((status, error) => {
+    if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+      toast(friendly(error || new Error("Não foi possível conectar às notificações em tempo real.")), false);
+    }
+  });
+}
+
+$("#notifications-toggle").addEventListener("click", () => {
+  const panel = $("#notifications-panel");
+  panel.hidden = !panel.hidden;
+  $("#notifications-toggle").setAttribute("aria-expanded", String(!panel.hidden));
+});
+
+$("#notification-sound-toggle").addEventListener("click", async () => {
+  if (NOTIFICATION_SOUND_ENABLED) {
+    NOTIFICATION_SOUND_ENABLED = false;
+    localStorage.setItem("boss-notification-sound", "false");
+    updateNotificationControls();
+    return;
+  }
+  try {
+    await enableNotificationSound();
+    toast(
+      !("Notification" in window)
+        ? "Som ativado; este navegador não oferece alertas de desktop."
+        : Notification.permission === "denied"
+          ? "Som ativado. Alertas do navegador estão bloqueados nas configurações."
+          : "Som e alertas ativados.",
+    );
+  } catch (error) {
+    toast(friendly(error), false);
+  }
+});
+
+$("#notifications-read-all").addEventListener("click", () => {
+  NOTIFICATIONS.forEach((notification) => {
+    notification.read = true;
+  });
+  renderNotifications();
+});
+
+$("#notifications-list").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-notification-id]");
+  if (!button) return;
+  const notification = NOTIFICATIONS.find((item) => item.id === button.dataset.notificationId);
+  if (!notification) return;
+  notification.read = true;
+  renderNotifications();
+  $("#notifications-panel").hidden = true;
+  $("#notifications-toggle").setAttribute("aria-expanded", "false");
+  if (notification.route) location.hash = notification.route;
+});
+
+document.addEventListener("pointerdown", () => {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (NOTIFICATION_SOUND_ENABLED && !NOTIFICATION_AUDIO && AudioContextClass) {
+    NOTIFICATION_AUDIO = new AudioContextClass();
+  }
+  if (NOTIFICATION_SOUND_ENABLED && NOTIFICATION_AUDIO?.state === "suspended") {
+    NOTIFICATION_AUDIO.resume().catch((error) => toast(friendly(error), false));
+  }
+});
+
 async function q(builder) {
   const { data, error } = await builder;
   if (error) throw error;
@@ -252,16 +489,15 @@ async function swapOrder(table, field, id, dir, filter) {
 /* ===================== Carregamento de dados ===================== */
 async function loadRefs() {
   const [clients, projects, contracts] = await Promise.all([
-    q(sb.from("clients").select("*").order("name")),
-    q(
-      sb.from("projects").select("*").order("created_at", { ascending: false }),
-    ),
-    q(
-      sb
-        .from("contracts")
-        .select("*")
-        .order("created_at", { ascending: false }),
-    ),
+    hasModuleAccess("clients")
+      ? q(sb.from("clients").select("*").order("name"))
+      : [],
+    hasModuleAccess("projects")
+      ? q(sb.from("projects").select("*").order("created_at", { ascending: false }))
+      : [],
+    hasModuleAccess("contracts")
+      ? q(sb.from("contracts").select("*").order("created_at", { ascending: false }))
+      : [],
   ]);
   DB.clients = clients;
   DB.projects = projects;
@@ -269,6 +505,10 @@ async function loadRefs() {
 }
 
 async function loadFinance() {
+  if (!hasModuleAccess("finance")) {
+    FIN = { receivables: [], payments: [], expenses: [] };
+    return;
+  }
   const [rec, pay, exp] = await Promise.all([
     q(
       sb.from("receivables").select("*").order("due_date", { ascending: true }),
@@ -693,6 +933,8 @@ async function enterApp() {
     return;
   }
   $("#user-email").textContent = session.user.email;
+  updateNotificationControls();
+  startRealtimeNotifications(session.user.id);
   updateNavigation();
   showScreen("app");
   await route();
@@ -964,8 +1206,9 @@ async function route() {
   try {
     await loadRefs();
     if (
-      page === "visao-geral" ||
-      (page === "financeiro" && id === "mensalidades")
+      MEMBER_CONTEXT.isAdmin &&
+      (page === "visao-geral" ||
+        (page === "financeiro" && id === "mensalidades"))
     )
       await ensureMaintenance();
     await loadFinance();
@@ -3308,7 +3551,12 @@ if (location.hash.includes("type=recovery")) {
 }
 sb.auth.onAuthStateChange((event) => {
   if (event === "PASSWORD_RECOVERY") showScreen("reset");
-  if (event === "SIGNED_OUT") showScreen("login");
+  if (event === "SIGNED_OUT") {
+    if (NOTIFICATION_CHANNEL) sb.removeChannel(NOTIFICATION_CHANNEL);
+    NOTIFICATION_CHANNEL = null;
+    MEMBER_CONTEXT = { isAdmin: false, profile: null };
+    showScreen("login");
+  }
 });
 
 /* ===== Gerenciamento de seleção de tipo de trabalho (botões no estilo btn-ghost) ===== */

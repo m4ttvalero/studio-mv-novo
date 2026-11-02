@@ -428,6 +428,93 @@ select option {
   white-space: nowrap;
   display: block;
 }
+.notification-controls {
+  position: relative;
+  display: grid;
+  gap: 6px;
+}
+.notification-button {
+  width: 100%;
+  justify-content: flex-start;
+}
+.notification-button svg {
+  flex: 0 0 auto;
+}
+.notification-count {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--blue);
+  color: var(--white);
+  font-size: 0.72rem;
+  text-align: center;
+}
+.notification-sound {
+  width: 100%;
+  justify-content: flex-start;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.notification-panel {
+  position: fixed;
+  z-index: 1200;
+  left: 16px;
+  bottom: 112px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(440px, calc(100vh - 140px));
+  overflow: auto;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+.notification-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.notification-panel-head .link-btn {
+  font-size: 0.78rem;
+}
+.notification-list {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.notification-item {
+  display: grid;
+  width: 100%;
+  gap: 3px;
+  padding: 10px;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.notification-item:hover,
+.notification-item.unread {
+  background: rgba(31, 107, 255, 0.12);
+}
+.notification-item span,
+.notification-item time {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.notification-empty {
+  padding: 14px 8px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  text-align: center;
+}
 .main {
   padding: 28px 32px 60px;
   min-width: 0;
