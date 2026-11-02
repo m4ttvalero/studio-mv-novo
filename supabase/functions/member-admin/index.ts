@@ -50,25 +50,30 @@ Deno.serve(async (request) => {
   }
 
   const url = Deno.env.get("SUPABASE_URL");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !anonKey || !serviceKey) {
+  if (!url || !serviceKey) {
     return response({ error: "A função não está configurada no Supabase." }, 500);
   }
 
-  const userClient = createClient(url, anonKey, {
-    global: { headers: { Authorization: authorization } },
+  const service = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const accessToken = authorization.slice("Bearer ".length);
   const {
     data: { user },
     error: userError,
-  } = await userClient.auth.getUser(accessToken);
-  if (userError || !user) return response({ error: "Sessão inválida." }, 401);
+  } = await service.auth.getUser(accessToken);
+  if (userError || !user) {
+    return response({ error: "Sessão inválida ou expirada. Entre novamente no painel." }, 401);
+  }
 
-  const { data: isAdmin, error: adminError } = await userClient.rpc("is_admin");
-  if (adminError || !isAdmin) {
+  const { data: admins, error: adminError } = await service
+    .from("admins")
+    .select("email");
+  if (adminError) {
+    return response({ error: "Não foi possível verificar a permissão administrativa." }, 500);
+  }
+  if (!admins.some((admin) => admin.email.toLowerCase() === user.email?.toLowerCase())) {
     return response({ error: "Somente a conta administradora pode gerenciar membros." }, 403);
   }
 
@@ -79,9 +84,6 @@ Deno.serve(async (request) => {
     return response({ error: "Dados inválidos." }, 400);
   }
 
-  const service = createClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
   const action = payload.action;
 
   if (action === "create") {

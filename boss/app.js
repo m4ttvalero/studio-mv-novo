@@ -3226,7 +3226,29 @@ function memberForm(member) {
 }
 
 async function invokeMemberAdmin(body) {
-  const { data, error } = await sb.functions.invoke("member-admin", { body });
+  const { data: sessionData, error: sessionError } = await sb.auth.getSession();
+  if (sessionError) throw sessionError;
+  if (!sessionData.session) {
+    throw new Error("Sua sessão expirou. Entre novamente no painel.");
+  }
+
+  let result = await sb.functions.invoke("member-admin", {
+    body,
+    headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+  });
+  if (result.error?.context instanceof Response && result.error.context.status === 401) {
+    const { data, error } = await sb.auth.refreshSession();
+    if (error) throw error;
+    if (!data.session) {
+      throw new Error("Sua sessão expirou. Entre novamente no painel.");
+    }
+    result = await sb.functions.invoke("member-admin", {
+      body,
+      headers: { Authorization: `Bearer ${data.session.access_token}` },
+    });
+  }
+
+  const { data, error } = result;
   if (error) {
     if (error.context instanceof Response) {
       const details = await error.context.json();
