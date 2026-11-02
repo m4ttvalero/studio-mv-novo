@@ -313,8 +313,10 @@ create table if not exists public.settings (
   value text
 );
 
--- Publica mensagens e tarefas no Realtime para os alertas do painel.
+-- Publica as tabelas usadas pelo painel para atualizações em tempo real.
 do $$
+declare
+  v_table text;
 begin
   if not exists (
     select 1 from pg_publication where pubname = 'supabase_realtime'
@@ -322,23 +324,21 @@ begin
     raise exception 'A publicação supabase_realtime não existe.';
   end if;
 
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime'
-      and schemaname = 'public'
-      and tablename = 'messages'
-  ) then
-    alter publication supabase_realtime add table public.messages;
-  end if;
-
-  if not exists (
-    select 1 from pg_publication_tables
-    where pubname = 'supabase_realtime'
-      and schemaname = 'public'
-      and tablename = 'member_tasks'
-  ) then
-    alter publication supabase_realtime add table public.member_tasks;
-  end if;
+  foreach v_table in array array[
+    'clients', 'projects', 'project_stages', 'waitlist', 'messages',
+    'contracts', 'contract_files', 'receivables', 'payments', 'expenses',
+    'portfolio', 'members', 'settings', 'member_tasks'
+  ]
+  loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = v_table
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', v_table);
+    end if;
+  end loop;
 end;
 $$;
 
@@ -353,6 +353,19 @@ create table if not exists public.activity_log (
   label text,
   created_at timestamptz not null default now()
 );
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'activity_log'
+  ) then
+    alter publication supabase_realtime add table public.activity_log;
+  end if;
+end;
+$$;
 
 create or replace function public.log_activity()
 returns trigger

@@ -79,6 +79,8 @@ let FIN = { receivables: [], payments: [], expenses: [] };
 let MEMBER_CONTEXT = { isAdmin: false, profile: null };
 let NOTIFICATIONS = [];
 let NOTIFICATION_CHANNEL = null;
+let REALTIME_REFRESH_TIMER = null;
+let REALTIME_REFRESH_PENDING = false;
 let NOTIFICATION_AUDIO = null;
 const NOTIFIED_TASK_COMPLETIONS = new Set();
 let NOTIFICATION_SOUND_ENABLED =
@@ -291,6 +293,18 @@ function updateNotificationControls() {
   button.setAttribute("aria-pressed", String(enabled));
 }
 
+function scheduleRealtimeRefresh() {
+  if ($("#screen-app").hidden) return;
+  REALTIME_REFRESH_PENDING = true;
+  if (document.hidden || document.activeElement?.closest("form")) return;
+  clearTimeout(REALTIME_REFRESH_TIMER);
+  REALTIME_REFRESH_TIMER = setTimeout(() => {
+    if (document.hidden || document.activeElement?.closest("form")) return;
+    REALTIME_REFRESH_PENDING = false;
+    route();
+  }, 180);
+}
+
 function startRealtimeNotifications(userId) {
   if (NOTIFICATION_CHANNEL) {
     sb.removeChannel(NOTIFICATION_CHANNEL);
@@ -299,6 +313,48 @@ function startRealtimeNotifications(userId) {
   NOTIFICATIONS = [];
   renderNotifications();
   const channel = sb.channel(`boss-notifications-${userId}`);
+  const realtimeTables = [
+    ["clients", "clients", false],
+    ["projects", "projects", false],
+    ["project_stages", "projects", false],
+    ["waitlist", "waitlist", false],
+    ["messages", "messages", false],
+    ["contracts", "contracts", false],
+    ["contract_files", "contracts", false],
+    ["receivables", "finance", false],
+    ["payments", "finance", false],
+    ["expenses", "finance", false],
+    ["portfolio", "portfolio", false],
+    ["members", null, true],
+    ["settings", null, true],
+    ["member_tasks", null, false],
+    ["activity_log", null, true],
+  ];
+  realtimeTables.forEach(([table, module, adminOnly]) => {
+    if (module && !hasModuleAccess(module)) return;
+    if (adminOnly && !MEMBER_CONTEXT.isAdmin) return;
+    channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table },
+      scheduleRealtimeRefresh,
+    );
+  });
+  if (!MEMBER_CONTEXT.isAdmin) {
+    channel.on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "members",
+        filter: `user_id=eq.${userId}`,
+      },
+      ({ new: profile }) => {
+        MEMBER_CONTEXT.profile = profile;
+        updateNavigation();
+        scheduleRealtimeRefresh();
+      },
+    );
+  }
   if (MEMBER_CONTEXT.isAdmin) {
     channel.on(
       "postgres_changes",
@@ -370,6 +426,18 @@ $("#notifications-toggle").addEventListener("click", () => {
   $("#notifications-toggle").setAttribute("aria-expanded", String(!panel.hidden));
 });
 
+document.addEventListener("pointerdown", (event) => {
+  const panel = $("#notifications-panel");
+  if (
+    panel.hidden ||
+    panel.contains(event.target) ||
+    $("#notifications-toggle").contains(event.target)
+  )
+    return;
+  panel.hidden = true;
+  $("#notifications-toggle").setAttribute("aria-expanded", "false");
+});
+
 $("#notification-sound-toggle").addEventListener("click", async () => {
   if (NOTIFICATION_SOUND_ENABLED) {
     NOTIFICATION_SOUND_ENABLED = false;
@@ -418,6 +486,19 @@ document.addEventListener("pointerdown", () => {
   if (NOTIFICATION_SOUND_ENABLED && NOTIFICATION_AUDIO?.state === "suspended") {
     NOTIFICATION_AUDIO.resume().catch((error) => toast(friendly(error), false));
   }
+});
+
+document.addEventListener("focusout", () => {
+  if (!REALTIME_REFRESH_PENDING) return;
+  setTimeout(() => {
+    if (REALTIME_REFRESH_PENDING && !document.activeElement?.closest("form")) {
+      scheduleRealtimeRefresh();
+    }
+  }, 0);
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && REALTIME_REFRESH_PENDING) scheduleRealtimeRefresh();
 });
 
 async function q(builder) {
