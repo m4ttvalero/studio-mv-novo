@@ -91,7 +91,7 @@ create table if not exists public.project_stages (
 -- ===================================================================
 create table if not exists public.waitlist (
   id uuid primary key default gen_random_uuid(),
-  client_id uuid not null references public.clients(id) on delete restrict,
+  client_id uuid not null references public.clients(id) on delete cascade,
   service text,
   description text,
   estimated_value numeric(12,2) check (estimated_value is null or estimated_value >= 0),
@@ -104,6 +104,13 @@ create table if not exists public.waitlist (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- A fila é um dado auxiliar do cliente; também atualiza instalações existentes.
+alter table public.waitlist
+  drop constraint if exists waitlist_client_id_fkey;
+alter table public.waitlist
+  add constraint waitlist_client_id_fkey
+  foreign key (client_id) references public.clients(id) on delete cascade;
 
 -- ===================================================================
 -- 5. SOLICITAÇÕES DO FORMULÁRIO DO SITE

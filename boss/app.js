@@ -164,7 +164,7 @@ function friendly(e) {
   if (code === "23505")
     return "Já existe um registro com estes dados (por exemplo, um cliente com o mesmo e-mail).";
   if (code === "23503")
-    return 'Este registro está vinculado a outros e não pode ser removido. Use "Arquivar" quando disponível.';
+    return 'Este registro possui dados vinculados que impedem a exclusão. Remova os registros dependentes ou arquive o registro, quando disponível.';
   if (code === "23514")
     return "Algum valor não respeita as regras (datas, valores ou campos obrigatórios).";
   if (code === "42501")
@@ -2676,7 +2676,7 @@ GACT["cli-del"] = (id) =>
   removeRecord(
     "clients",
     id,
-    'Excluir este cliente? Clientes com projetos, contratos, cobranças ou solicitações não podem ser excluídos. Nesses casos, use "Arquivar".',
+    "Excluir este cliente? Os itens dele na fila de espera também serão excluídos. Projetos, contratos, cobranças ou pagamentos vinculados precisam ser removidos antes. Solicitações vinculadas serão preservadas.",
   );
 
 GACT["con-new"] = () => contractForm();
