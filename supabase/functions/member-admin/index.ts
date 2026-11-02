@@ -157,8 +157,9 @@ Deno.serve(async (request) => {
       .from("members")
       .select("email,name,job_title,permissions")
       .eq("user_id", userId)
-      .single();
-    if (currentError) return response({ error: currentError.message }, 404);
+      .maybeSingle();
+    if (currentError) return response({ error: currentError.message }, 500);
+    if (!current) return response({ error: "Membro não encontrado." }, 404);
 
     const { error: memberError } = await service
       .from("members")

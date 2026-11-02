@@ -170,6 +170,12 @@ function parseMoney(v) {
 
 function friendly(e) {
   const code = e && e.code;
+  if (code === "PGRST116") {
+    const details = String(e.details || "").toLowerCase();
+    return details.includes("0 rows") || details.includes("zero rows")
+      ? "Este registro não foi encontrado. Ele pode ter sido removido ou seu acesso pode ter mudado; atualize a tela e tente novamente."
+      : "A consulta encontrou mais de um registro quando esperava apenas um. Atualize a tela e, se o erro continuar, avise o administrador.";
+  }
   if (code === "23505")
     return "Já existe um registro com estes dados (por exemplo, um cliente com o mesmo e-mail).";
   if (code === "23503")
