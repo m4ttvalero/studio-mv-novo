@@ -2910,10 +2910,14 @@ function openMessage(m) {
     digits.length >= 10
       ? `https://wa.me/${digits.startsWith("55") ? digits : "55" + digits}`
       : "";
-  const contactMessage = `Olá, ${m.name}! Tudo bem? Recebi sua solicitação pelo site sobre ${m.type}. Obrigado por compartilhar seu projeto. Podemos conversar por aqui para esclarecer suas dúvidas e alinhar os próximos passos. Se preferir, me conte um pouco mais sobre o que você precisa.`;
-  const emailSubject = `Vamos conversar sobre ${m.type}`;
-  const emailAddress = encodeURIComponent(m.email).replace(/%40/gi, "@");
-  const emailLink = `mailto:${emailAddress}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(contactMessage)}`;
+  const isUndecided = m.type?.trim().toLowerCase() === "ainda não sei";
+  const contactMessage = isUndecided
+    ? `Olá, ${m.name}! Tudo bem? Recebi sua solicitação pelo site e vi que você ainda não sabe qual serviço é o ideal para o seu projeto. Sem problema: podemos conversar por aqui, entender melhor o que você precisa e esclarecer suas dúvidas para encontrar a solução mais adequada.`
+    : `Olá, ${m.name}! Tudo bem? Recebi sua solicitação pelo site e vi que você tem interesse em ${m.type}. Obrigado por compartilhar seu projeto. Podemos conversar por aqui para esclarecer suas dúvidas e alinhar os próximos passos.`;
+  const emailSubject = isUndecided
+    ? "Vamos encontrar a melhor solução para seu projeto"
+    : `Vamos conversar sobre ${m.type}`;
+  const emailLink = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(m.email)}&su=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(contactMessage)}`;
   const whatsappLink = wa
     ? `${wa}?text=${encodeURIComponent(contactMessage)}`
     : "";
@@ -2933,7 +2937,7 @@ function openMessage(m) {
       <button class="ghost sm" type="button" data-copy="${esc(m.email)}">Copiar e-mail</button>
       <button class="ghost sm" type="button" data-copy="${esc(m.phone)}">Copiar telefone</button>
       ${whatsappLink ? `<a class="btn sm" href="${whatsappLink}" target="_blank" rel="noopener noreferrer">Conversar pelo WhatsApp</a>` : ""}
-      ${m.email ? `<a class="btn sm" href="${emailLink}">Enviar e-mail</a>` : ""}
+      ${m.email ? `<a class="btn sm" href="${emailLink}" target="_blank" rel="noopener noreferrer">Enviar pelo Gmail</a>` : ""}
     </div>
     ${canEdit ? `<form class="form" id="msg-form" novalidate>
       <div class="field full"><label for="m-status">Situação</label>
