@@ -410,7 +410,7 @@ function waLink(num) {
   return `<a href="https://wa.me/${full}" target="_blank" rel="noopener noreferrer">${esc(num)}</a>`;
 }
 
-function lineChart(labels, a, b) {
+function lineChart(points) {
   const W = 640,
     H = 238,
     left = 64,
@@ -418,7 +418,7 @@ function lineChart(labels, a, b) {
     top = 14,
     bottom = 205,
     max = 10000;
-  const x = (i) => left + (i * (W - left - right)) / Math.max(1, labels.length - 1);
+  const x = (i) => left + (i * (W - left - right)) / Math.max(1, points.length - 1);
   const y = (value) => bottom - (Math.min(Math.max(0, value), max) / max) * (bottom - top);
   const grid = Array.from({ length: 10 }, (_, i) => {
     const value = (i + 1) * 1000;
@@ -428,16 +428,18 @@ function lineChart(labels, a, b) {
   }).join("");
   const line = (values, cls, label) => {
     const path = values.map((value, i) => `${i ? "L" : "M"}${x(i)},${y(value)}`).join(" ");
-    const points = values.map((value, i) =>
-      `<circle class="chart-point ${cls}" cx="${x(i)}" cy="${y(value)}" r="3.5"><title>${esc(label)} · ${esc(labels[i])}: ${brl(value)}</title></circle>`,
+    const markers = values.map((value, i) =>
+      `<circle class="chart-point ${cls}" cx="${x(i)}" cy="${y(value)}" r="2.5"><title>${esc(label)} · ${esc(points[i].tooltip)}: ${brl(value)}</title></circle>`,
     ).join("");
-    return `<path class="chart-line ${cls}" d="${path}"/>${points}`;
+    return `<path class="chart-line ${cls}" d="${path}"/>${markers}`;
   };
-  const dateLabels = Array.from({ length: Math.min(6, labels.length) }, (_, tick) => {
-    const i = Math.round((tick * (labels.length - 1)) / (Math.min(6, labels.length) - 1 || 1));
-    return `<text class="axis-label" x="${x(i)}" y="${H - 10}" text-anchor="middle">${fmtDate(labels[i])}</text>`;
+  const received = points.map((point) => point.received);
+  const expenses = points.map((point) => point.expenses);
+  const dateLabels = Array.from({ length: Math.min(6, points.length) }, (_, tick) => {
+    const i = Math.round((tick * (points.length - 1)) / (Math.min(6, points.length) - 1 || 1));
+    return `<text class="axis-label" x="${x(i)}" y="${H - 10}" text-anchor="middle">${fmtDate(points[i].start)}</text>`;
   }).join("");
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Receitas e despesas diárias dos últimos seis meses; escala de R$ 1.000 a R$ 10.000">${grid}${dateLabels}${line(a, "line-in", "Recebido")}${line(b, "line-out", "Despesas")}</svg>
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Receitas e despesas por período; escala de R$ 1.000 a R$ 10.000">${grid}${dateLabels}${line(received, "line-in", "Recebido")}${line(expenses, "line-out", "Despesas")}</svg>
     <div class="legend"><span><span class="sw in"></span>Recebido</span><span><span class="sw out"></span>Despesas</span></div>`;
 }
 
@@ -1001,6 +1003,60 @@ MAIN.addEventListener("submit", (e) => {
 });
 window.addEventListener("hashchange", route);
 
+function overviewChartPoints(period, now = new Date()) {
+  const start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dailyTotals = new Map();
+  FIN.payments.forEach((payment) => {
+    const totals = dailyTotals.get(payment.paid_on) || { received: 0, expenses: 0 };
+    totals.received += Number(payment.amount);
+    dailyTotals.set(payment.paid_on, totals);
+  });
+  FIN.expenses.forEach((expense) => {
+    const totals = dailyTotals.get(expense.spent_on) || { received: 0, expenses: 0 };
+    totals.expenses += Number(expense.amount);
+    dailyTotals.set(expense.spent_on, totals);
+  });
+
+  const buckets = new Map();
+  for (const date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+    const iso = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    let key = iso;
+    if (period === "week") {
+      const monday = new Date(date);
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+      key = `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}-${pad(monday.getDate())}`;
+    } else if (period === "month") {
+      key = iso.slice(0, 7);
+    }
+
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = {
+        start: iso,
+        end: iso,
+        received: 0,
+        expenses: 0,
+      };
+      buckets.set(key, bucket);
+    }
+    bucket.end = iso;
+    const totals = dailyTotals.get(iso);
+    if (totals) {
+      bucket.received += totals.received;
+      bucket.expenses += totals.expenses;
+    }
+  }
+
+  return [...buckets.values()].map((bucket) => ({
+    ...bucket,
+    tooltip:
+      bucket.start === bucket.end
+        ? fmtDate(bucket.start)
+        : `${fmtDate(bucket.start)} a ${fmtDate(bucket.end)}`,
+  }));
+}
+
 /* ===================== Visão geral ===================== */
 async function viewOverview(main) {
   const today = isoToday(),
@@ -1045,22 +1101,7 @@ async function viewOverview(main) {
       .limit(8),
   );
 
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  const dates = [];
-  for (const date = new Date(start); date <= now; date.setDate(date.getDate() + 1)) {
-    dates.push(`${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`);
-  }
-  const recvByDate = new Map();
-  FIN.payments.forEach((payment) => {
-    recvByDate.set(payment.paid_on, (recvByDate.get(payment.paid_on) || 0) + Number(payment.amount));
-  });
-  const expByDate = new Map();
-  FIN.expenses.forEach((expense) => {
-    expByDate.set(expense.spent_on, (expByDate.get(expense.spent_on) || 0) + Number(expense.amount));
-  });
-  const recvBy = dates.map((date) => recvByDate.get(date) || 0);
-  const expBy = dates.map((date) => expByDate.get(date) || 0);
+  const chartPeriod = "week";
   const dues = FIN.receivables.filter((r) => r.remaining > 0.005).slice(0, 6);
 
   shell(
@@ -1083,7 +1124,19 @@ async function viewOverview(main) {
       ${kpi("Receita mensal recorrente", brl(mrr))}
     </div>
     <div class="two-col">
-      <div class="card"><h2>Receitas e despesas · últimos 6 meses</h2>${lineChart(dates, recvBy, expBy)}</div>
+      <div class="card">
+        <div class="chart-head">
+          <h2>Receitas e despesas · últimos 6 meses</h2>
+          <label class="chart-filter">Exibir por
+            <select id="overview-chart-period" aria-label="Agrupar gráfico por período">
+              <option value="day">Dia</option>
+              <option value="week" selected>Semana</option>
+              <option value="month">Mês</option>
+            </select>
+          </label>
+        </div>
+        <div id="overview-chart">${lineChart(overviewChartPoints(chartPeriod))}</div>
+      </div>
       <div class="card"><h2>Próximos vencimentos</h2>
         ${
           dues.length
@@ -1105,6 +1158,12 @@ async function viewOverview(main) {
       }
     </div>`,
   );
+  const chartFilter = $("#overview-chart-period", main);
+  chartFilter.addEventListener("change", () => {
+    $("#overview-chart", main).innerHTML = lineChart(
+      overviewChartPoints(chartFilter.value),
+    );
+  });
 }
 
 /* ===================== Projetos ===================== */
