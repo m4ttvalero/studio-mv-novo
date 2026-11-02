@@ -79,6 +79,9 @@ let FIN = { receivables: [], payments: [], expenses: [] };
 let MEMBER_CONTEXT = { isAdmin: false, profile: null };
 let NOTIFICATIONS = [];
 let NOTIFICATION_CHANNEL = null;
+let NOTIFICATION_STORAGE_KEY = null;
+let MESSAGE_CHECKPOINT_KEY = null;
+let NOTIFICATION_SOUND_PENDING = false;
 let REALTIME_REFRESH_TIMER = null;
 let REALTIME_REFRESH_PENDING = false;
 let NOTIFICATION_AUDIO = null;
@@ -216,8 +219,58 @@ function renderNotifications() {
     : '<li class="notification-empty">Nenhuma notificação por enquanto.</li>';
 }
 
+function loadStoredNotifications(userId) {
+  NOTIFICATION_STORAGE_KEY = `boss-notifications-${userId}`;
+  MESSAGE_CHECKPOINT_KEY = `boss-message-checkpoint-${userId}`;
+  const stored = localStorage.getItem(NOTIFICATION_STORAGE_KEY);
+  if (!stored) {
+    NOTIFICATIONS = [];
+    return;
+  }
+  try {
+    const parsed = JSON.parse(stored);
+    NOTIFICATIONS = Array.isArray(parsed)
+      ? parsed.filter(
+          (item) =>
+            item &&
+            typeof item.id === "string" &&
+            typeof item.title === "string" &&
+            typeof item.body === "string" &&
+            typeof item.createdAt === "string",
+        ).slice(0, 30)
+      : [];
+  } catch (error) {
+    toast("Não foi possível recuperar as notificações salvas neste navegador.", false);
+    NOTIFICATIONS = [];
+  }
+}
+
+function persistNotifications() {
+  if (!NOTIFICATION_STORAGE_KEY) return;
+  localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(NOTIFICATIONS));
+}
+
+function markMessageNotificationsRead(messageId) {
+  let changed = false;
+  NOTIFICATIONS.forEach((notification) => {
+    if (notification.entityId === messageId && !notification.read) {
+      notification.read = true;
+      changed = true;
+    }
+  });
+  if (changed) {
+    persistNotifications();
+    renderNotifications();
+  }
+}
+
 function playNotificationSound() {
-  if (!NOTIFICATION_SOUND_ENABLED || !NOTIFICATION_AUDIO || NOTIFICATION_AUDIO.state !== "running") return;
+  if (!NOTIFICATION_SOUND_ENABLED) return;
+  if (!NOTIFICATION_AUDIO || NOTIFICATION_AUDIO.state !== "running") {
+    NOTIFICATION_SOUND_PENDING = true;
+    return;
+  }
+  NOTIFICATION_SOUND_PENDING = false;
   const start = NOTIFICATION_AUDIO.currentTime;
   [880, 660].forEach((frequency, index) => {
     const time = start + index * 0.16;
@@ -235,20 +288,27 @@ function playNotificationSound() {
   });
 }
 
-function notifyUser(title, body, route) {
+function notifyUser(title, body, route, options = {}) {
+  const notificationId = options.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  if (NOTIFICATIONS.some((notification) => notification.id === notificationId)) {
+    return false;
+  }
   const notification = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    id: notificationId,
     title,
     body,
     route,
-    createdAt: new Date().toISOString(),
     read: false,
+    entityId: options.entityId || null,
+    createdAt: options.createdAt || new Date().toISOString(),
   };
   NOTIFICATIONS.unshift(notification);
   NOTIFICATIONS = NOTIFICATIONS.slice(0, 30);
+  persistNotifications();
   renderNotifications();
-  playNotificationSound();
+  if (options.playSound !== false) playNotificationSound();
   if (
+    options.showDesktop !== false &&
     NOTIFICATION_SOUND_ENABLED &&
     document.hidden &&
     "Notification" in window &&
@@ -264,6 +324,77 @@ function notifyUser(title, body, route) {
       if (route) location.hash = route;
       desktop.close();
     };
+  }
+  return true;
+}
+
+async function loadMissedMessageNotifications() {
+  const checkpoint = localStorage.getItem(MESSAGE_CHECKPOINT_KEY);
+  const cutoff = new Date().toISOString();
+  const messages = [];
+  const pageSize = 100;
+  for (let offset = 0; ; offset += pageSize) {
+    let query = sb
+      .from("messages")
+      .select("id,name,company,created_at")
+      .lte("created_at", cutoff)
+      .order("created_at", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (checkpoint) {
+      query = query.gt("created_at", checkpoint);
+    } else {
+      query = query.eq("status", "Nova");
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+    messages.push(...data);
+    if (data.length < pageSize) break;
+  }
+
+  let added = 0;
+  messages.forEach((message) => {
+    if (
+      notifyUser(
+        "Nova solicitação",
+        `${message.name}${message.company ? ` · ${message.company}` : ""}`,
+        `#/mensagens/${message.id}`,
+        {
+          id: `message:${message.id}`,
+          entityId: message.id,
+          createdAt: message.created_at,
+          playSound: false,
+          showDesktop: false,
+        },
+      )
+    )
+      added += 1;
+  });
+  localStorage.setItem(MESSAGE_CHECKPOINT_KEY, cutoff);
+  if (added) {
+    playNotificationSound();
+    if (
+      NOTIFICATION_SOUND_ENABLED &&
+      document.hidden &&
+      "Notification" in window &&
+      Notification.permission === "granted"
+    ) {
+      const desktop = new Notification(
+        added === 1 ? "Nova solicitação" : `${added} novas solicitações`,
+        {
+          body:
+            added === 1
+              ? "Abra o painel para conferir a mensagem recebida."
+              : "Abra o painel para conferir as mensagens recebidas.",
+          icon: "../img/logo.png",
+          tag: `missed-messages-${Date.now()}`,
+        },
+      );
+      desktop.onclick = () => {
+        window.focus();
+        location.hash = "#/mensagens";
+        desktop.close();
+      };
+    }
   }
 }
 
@@ -316,7 +447,7 @@ function startRealtimeNotifications(userId) {
     sb.removeChannel(NOTIFICATION_CHANNEL);
     NOTIFICATION_CHANNEL = null;
   }
-  NOTIFICATIONS = [];
+  loadStoredNotifications(userId);
   renderNotifications();
   const channel = sb.channel(`boss-notifications-${userId}`);
   const realtimeTables = [
@@ -361,6 +492,25 @@ function startRealtimeNotifications(userId) {
       },
     );
   }
+  let catchupInProgress = false;
+  let catchupRequested = false;
+  const loadMissedMessages = async () => {
+    if (catchupInProgress) {
+      catchupRequested = true;
+      return;
+    }
+    catchupInProgress = true;
+    do {
+      catchupRequested = false;
+      try {
+        await loadMissedMessageNotifications();
+      } catch (error) {
+        toast(friendly(error), false);
+        break;
+      }
+    } while (catchupRequested);
+    catchupInProgress = false;
+  };
   if (MEMBER_CONTEXT.isAdmin) {
     channel.on(
       "postgres_changes",
@@ -368,9 +518,14 @@ function startRealtimeNotifications(userId) {
       ({ new: message }) => {
         if (message.status !== "Nova") return;
         notifyUser(
-          "Nova mensagem recebida",
+          "Nova solicitação",
           `${message.name} · ${message.company}`,
           `#/mensagens/${message.id}`,
+          {
+            id: `message:${message.id}`,
+            entityId: message.id,
+            createdAt: message.created_at,
+          },
         );
       },
     );
@@ -420,10 +575,14 @@ function startRealtimeNotifications(userId) {
     );
   }
   NOTIFICATION_CHANNEL = channel.subscribe((status, error) => {
+    if (status === "SUBSCRIBED" && MEMBER_CONTEXT.isAdmin) {
+      loadMissedMessages();
+    }
     if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
       toast(friendly(error || new Error("Não foi possível conectar às notificações em tempo real.")), false);
     }
   });
+  if (MEMBER_CONTEXT.isAdmin) loadMissedMessages();
 }
 
 // Keep the fixed panel outside the transformed mobile drawer to prevent clipping.
@@ -472,6 +631,7 @@ $("#notifications-read-all").addEventListener("click", () => {
   NOTIFICATIONS.forEach((notification) => {
     notification.read = true;
   });
+  persistNotifications();
   renderNotifications();
 });
 
@@ -481,6 +641,7 @@ $("#notifications-list").addEventListener("click", (event) => {
   const notification = NOTIFICATIONS.find((item) => item.id === button.dataset.notificationId);
   if (!notification) return;
   notification.read = true;
+  persistNotifications();
   renderNotifications();
   $("#notifications-panel").hidden = true;
   $("#notifications-toggle").setAttribute("aria-expanded", "false");
@@ -493,7 +654,11 @@ document.addEventListener("pointerdown", () => {
     NOTIFICATION_AUDIO = new AudioContextClass();
   }
   if (NOTIFICATION_SOUND_ENABLED && NOTIFICATION_AUDIO?.state === "suspended") {
-    NOTIFICATION_AUDIO.resume().catch((error) => toast(friendly(error), false));
+    NOTIFICATION_AUDIO.resume().then(() => {
+      if (NOTIFICATION_SOUND_PENDING) playNotificationSound();
+    }).catch((error) => toast(friendly(error), false));
+  } else if (NOTIFICATION_SOUND_ENABLED && NOTIFICATION_SOUND_PENDING) {
+    playNotificationSound();
   }
 });
 
@@ -2908,6 +3073,7 @@ async function viewMessages(main, openId) {
 }
 
 function openMessage(m) {
+  markMessageNotificationsRead(m.id);
   const canEdit = hasModuleAccess("messages", "write");
   const canConvert =
     canEdit && hasModuleAccess("clients", "write");

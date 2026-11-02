@@ -19,7 +19,7 @@ Site institucional e painel administrativo (`/boss`) da Studio MV.
 
 Na área **Add. Membro**, crie cada conta com e-mail e senha inicial, escolha a função e ajuste as permissões por módulo. A visão geral e as configurações ficam exclusivas do administrador. Cada membro vê somente as próprias tarefas e pode marcá-las como concluídas; a administração acompanha o status no perfil do membro. Remover um membro exclui a conta e as tarefas associadas.
 
-Com o painel aberto, as alterações nas telas são atualizadas em tempo real sem recarregar a página. Administradores recebem alertas de novas mensagens e de tarefas concluídas; membros recebem alertas de tarefas atribuídas. Clique em **Ativar som e alertas** e permita as notificações do navegador para habilitar o som e os avisos na área de trabalho.
+Com o painel aberto, as alterações nas telas são atualizadas em tempo real sem recarregar a página. Administradores recebem alertas de novas mensagens e de tarefas concluídas; solicitações recebidas enquanto o painel está fechado são recuperadas ao abrir o painel. Membros recebem alertas de tarefas atribuídas. As notificações ficam salvas neste navegador, e abrir uma solicitação pela lista de mensagens também a marca como lida. Clique em **Ativar som e alertas** e permita as notificações do navegador para habilitar o som e os avisos na área de trabalho.
 
 ## Publicação
 A Cloudflare Pages publica a pasta na raiz do repositório a cada `git push` na branch principal. Não há comando de build.
