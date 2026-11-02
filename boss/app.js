@@ -436,8 +436,10 @@ function lineChart(points) {
   const received = points.map((point) => point.received);
   const expenses = points.map((point) => point.expenses);
   const dateLabels = Array.from({ length: Math.min(6, points.length) }, (_, tick) => {
-    const i = Math.round((tick * (points.length - 1)) / (Math.min(6, points.length) - 1 || 1));
-    return `<text class="axis-label" x="${x(i)}" y="${H - 10}" text-anchor="middle">${fmtDate(points[i].start)}</text>`;
+    const count = Math.min(6, points.length);
+    const i = Math.round((tick * (points.length - 1)) / (count - 1 || 1));
+    const anchor = tick === 0 ? "start" : tick === count - 1 ? "end" : "middle";
+    return `<text class="axis-label" x="${x(i)}" y="${H - 10}" text-anchor="${anchor}">${fmtDate(points[i].start)}</text>`;
   }).join("");
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Receitas e despesas por período; escala de R$ 1.000 a R$ 10.000">${grid}${dateLabels}${line(received, "line-in", "Recebido")}${line(expenses, "line-out", "Despesas")}</svg>
     <div class="legend"><span><span class="sw in"></span>Recebido</span><span><span class="sw out"></span>Despesas</span></div>`;
@@ -1109,7 +1111,7 @@ async function viewOverview(main) {
     "Visão geral",
     "",
     `
-    <div class="card-grid">
+    <div class="card-grid overview-kpis">
       ${kpi("Projetos em andamento", inProgress)}
       ${kpi("Itens na fila de espera", queue)}
       ${kpi("Clientes ativos", activeClients)}
