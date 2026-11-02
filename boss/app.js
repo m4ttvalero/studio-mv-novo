@@ -2917,7 +2917,8 @@ function openMessage(m) {
   const emailSubject = isUndecided
     ? "Vamos encontrar a melhor solução para seu projeto"
     : `Vamos conversar sobre ${m.type}`;
-  const emailLink = `https://mail.google.com/mail/?authuser=studiomvcontato%40gmail.com&view=cm&fs=1&to=${encodeURIComponent(m.email)}&su=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(contactMessage)}`;
+  const gmailComposeUrl = `https://mail.google.com/mail/?authuser=studiomvcontato%40gmail.com&view=cm&fs=1&to=${encodeURIComponent(m.email)}&su=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(contactMessage)}`;
+  const emailLink = `https://accounts.google.com/AccountChooser?Email=studiomvcontato%40gmail.com&continue=${encodeURIComponent(gmailComposeUrl)}`;
   const whatsappLink = wa
     ? `${wa}?text=${encodeURIComponent(contactMessage)}`
     : "";
