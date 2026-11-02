@@ -2910,6 +2910,13 @@ function openMessage(m) {
     digits.length >= 10
       ? `https://wa.me/${digits.startsWith("55") ? digits : "55" + digits}`
       : "";
+  const contactMessage = `Olá, ${m.name}! Tudo bem? Recebi sua solicitação pelo site sobre ${m.type}. Obrigado por compartilhar seu projeto. Podemos conversar por aqui para esclarecer suas dúvidas e alinhar os próximos passos. Se preferir, me conte um pouco mais sobre o que você precisa.`;
+  const emailSubject = `Vamos conversar sobre ${m.type}`;
+  const emailAddress = encodeURIComponent(m.email).replace(/%40/gi, "@");
+  const emailLink = `mailto:${emailAddress}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(contactMessage)}`;
+  const whatsappLink = wa
+    ? `${wa}?text=${encodeURIComponent(contactMessage)}`
+    : "";
   const html = `
     <dl class="dl">
       <dt>Nome</dt><dd>${esc(m.name)}</dd>
@@ -2925,7 +2932,8 @@ function openMessage(m) {
     <div class="row-actions">
       <button class="ghost sm" type="button" data-copy="${esc(m.email)}">Copiar e-mail</button>
       <button class="ghost sm" type="button" data-copy="${esc(m.phone)}">Copiar telefone</button>
-      ${wa ? `<a class="btn sm" href="${wa}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp</a>` : ""}
+      ${whatsappLink ? `<a class="btn sm" href="${whatsappLink}" target="_blank" rel="noopener noreferrer">Conversar pelo WhatsApp</a>` : ""}
+      ${m.email ? `<a class="btn sm" href="${emailLink}">Enviar e-mail</a>` : ""}
     </div>
     ${canEdit ? `<form class="form" id="msg-form" novalidate>
       <div class="field full"><label for="m-status">Situação</label>
