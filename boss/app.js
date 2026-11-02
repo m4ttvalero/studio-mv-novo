@@ -433,10 +433,11 @@ function lineChart(labels, a, b) {
     ).join("");
     return `<path class="chart-line ${cls}" d="${path}"/>${points}`;
   };
-  const monthLabels = labels.map((label, i) =>
-    `<text class="axis-label" x="${x(i)}" y="${H - 10}" text-anchor="middle">${esc(label.slice(5))}/${esc(label.slice(2, 4))}</text>`,
-  ).join("");
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Receitas e despesas dos últimos seis meses; escala de R$ 1.000 a R$ 10.000">${grid}${monthLabels}${line(a, "line-in", "Recebido")}${line(b, "line-out", "Despesas")}</svg>
+  const dateLabels = Array.from({ length: Math.min(6, labels.length) }, (_, tick) => {
+    const i = Math.round((tick * (labels.length - 1)) / (Math.min(6, labels.length) - 1 || 1));
+    return `<text class="axis-label" x="${x(i)}" y="${H - 10}" text-anchor="middle">${fmtDate(labels[i])}</text>`;
+  }).join("");
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Receitas e despesas diárias dos últimos seis meses; escala de R$ 1.000 a R$ 10.000">${grid}${dateLabels}${line(a, "line-in", "Recebido")}${line(b, "line-out", "Despesas")}</svg>
     <div class="legend"><span><span class="sw in"></span>Recebido</span><span><span class="sw out"></span>Despesas</span></div>`;
 }
 
@@ -1044,22 +1045,22 @@ async function viewOverview(main) {
       .limit(8),
   );
 
-  const months = [];
   const now = new Date();
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+  const start = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  const dates = [];
+  for (const date = new Date(start); date <= now; date.setDate(date.getDate() + 1)) {
+    dates.push(`${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`);
   }
-  const recvBy = months.map((m) =>
-    sum(
-      FIN.payments.filter((p) => p.paid_on.startsWith(m)).map((p) => p.amount),
-    ),
-  );
-  const expBy = months.map((m) =>
-    sum(
-      FIN.expenses.filter((e) => e.spent_on.startsWith(m)).map((e) => e.amount),
-    ),
-  );
+  const recvByDate = new Map();
+  FIN.payments.forEach((payment) => {
+    recvByDate.set(payment.paid_on, (recvByDate.get(payment.paid_on) || 0) + Number(payment.amount));
+  });
+  const expByDate = new Map();
+  FIN.expenses.forEach((expense) => {
+    expByDate.set(expense.spent_on, (expByDate.get(expense.spent_on) || 0) + Number(expense.amount));
+  });
+  const recvBy = dates.map((date) => recvByDate.get(date) || 0);
+  const expBy = dates.map((date) => expByDate.get(date) || 0);
   const dues = FIN.receivables.filter((r) => r.remaining > 0.005).slice(0, 6);
 
   shell(
@@ -1082,7 +1083,7 @@ async function viewOverview(main) {
       ${kpi("Receita mensal recorrente", brl(mrr))}
     </div>
     <div class="two-col">
-      <div class="card"><h2>Receitas e despesas · últimos 6 meses</h2>${lineChart(months, recvBy, expBy)}</div>
+      <div class="card"><h2>Receitas e despesas · últimos 6 meses</h2>${lineChart(dates, recvBy, expBy)}</div>
       <div class="card"><h2>Próximos vencimentos</h2>
         ${
           dues.length
