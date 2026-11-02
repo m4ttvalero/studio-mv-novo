@@ -175,8 +175,7 @@ function parseMoney(v) {
 function friendly(e) {
   const code = e && e.code;
   if (code === "PGRST116") {
-    const details = String(e.details || "").toLowerCase();
-    return details.includes("0 rows") || details.includes("zero rows")
+    return isMissingRecordError(e)
       ? "Este registro não foi encontrado. Ele pode ter sido removido ou seu acesso pode ter mudado; atualize a tela e tente novamente."
       : "A consulta encontrou mais de um registro quando esperava apenas um. Atualize a tela e, se o erro continuar, avise o administrador.";
   }
@@ -263,6 +262,38 @@ function markMessageNotificationsRead(messageId) {
     persistNotifications();
     renderNotifications();
   }
+}
+
+function removeMessageNotification(messageId) {
+  const notificationId = `message:${messageId}`;
+  const remaining = NOTIFICATIONS.filter(
+    (notification) =>
+      notification.id !== notificationId &&
+      notification.entityId !== messageId,
+  );
+  if (remaining.length === NOTIFICATIONS.length) return;
+  NOTIFICATIONS = remaining;
+  MESSAGE_SOUND_NOTIFIED.delete(notificationId);
+  persistNotifications();
+  renderNotifications();
+}
+
+function isMissingRecordError(error) {
+  if (error?.code !== "PGRST116") return false;
+  const details = String(error.details || "").toLowerCase();
+  return details.includes("0 rows") || details.includes("zero rows");
+}
+
+function handleMissingMessage(messageId, error) {
+  if (!isMissingRecordError(error)) {
+    toast(friendly(error), false);
+    return;
+  }
+  removeMessageNotification(messageId);
+  if (location.hash === `#/mensagens/${messageId}`) {
+    location.hash = "#/mensagens";
+  }
+  toast("Esta solicitação não está mais disponível. A notificação antiga foi removida.", false);
 }
 
 function playNotificationSound() {
@@ -3109,7 +3140,7 @@ async function viewMessages(main, openId) {
     } else {
       q(sb.from("messages").select("*").eq("id", openId).single())
         .then(openMessage)
-        .catch((e) => toast(friendly(e), false));
+        .catch((e) => handleMissingMessage(openId, e));
     }
   }
 }
@@ -3209,6 +3240,7 @@ function openMessage(m) {
         try {
           const { error } = await sb.from("messages").delete().eq("id", m.id);
           if (error) throw error;
+          removeMessageNotification(m.id);
           close();
           toast("Mensagem excluída.");
           await route();
@@ -3841,10 +3873,16 @@ GACT["exp-del"] = (id) => removeRecord("expenses", id, "Excluir esta despesa?");
 GACT["msg-open"] = (id) => {
   q(sb.from("messages").select("*").eq("id", id).single())
     .then(openMessage)
-    .catch((e) => toast(friendly(e), false));
+    .catch((e) => handleMissingMessage(id, e));
 };
-GACT["msg-del"] = (id) =>
-  removeRecord("messages", id, "Excluir esta mensagem permanentemente?");
+GACT["msg-del"] = (id) => {
+  if (!confirm("Excluir esta mensagem permanentemente?")) return;
+  run(async () => {
+    const { error } = await sb.from("messages").delete().eq("id", id);
+    if (error) throw error;
+    removeMessageNotification(id);
+  }, "Mensagem excluída.");
+};
 
 GACT["pf-new"] = () => portfolioForm();
 GACT["pf-edit"] = (id) =>
