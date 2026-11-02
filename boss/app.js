@@ -2924,7 +2924,7 @@ function openMessage(m) {
     "Studio MV | Sites e soluções digitais sob medida",
     "E-mail: studiomvcontato@gmail.com",
     "Instagram: https://www.instagram.com/_studi0.mv/",
-    "Logo Studio MV: https://raw.githubusercontent.com/m4ttvalero/studio-mv-novo/main/img/logo.png",
+    "Site: https://studio-mv-novo.pages.dev/",
   ].join("\n");
   const emailBody = `${contactMessage}${emailSignature}`;
   const gmailComposeUrl = `https://mail.google.com/mail/?authuser=studiomvcontato%40gmail.com&view=cm&fs=1&to=${encodeURIComponent(m.email)}&su=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
