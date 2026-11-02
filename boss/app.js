@@ -420,6 +420,9 @@ function startRealtimeNotifications(userId) {
   });
 }
 
+// Keep the fixed panel outside the transformed mobile drawer to prevent clipping.
+document.body.append($("#notifications-panel"));
+
 $("#notifications-toggle").addEventListener("click", () => {
   const panel = $("#notifications-panel");
   panel.hidden = !panel.hidden;
