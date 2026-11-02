@@ -361,6 +361,18 @@ select option {
   flex-direction: column;
   gap: 3px;
 }
+.nav a[data-nav="portfolio"] {
+  order: 8;
+}
+.nav a[data-nav="tarefas"] {
+  order: 9;
+}
+.nav a[data-nav="membros"] {
+  order: 10;
+}
+.nav a[data-nav="configuracoes"] {
+  order: 11;
+}
 .nav a {
   color: var(--muted);
   text-decoration: none;
