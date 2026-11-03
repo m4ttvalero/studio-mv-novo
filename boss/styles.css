@@ -373,22 +373,22 @@ select option {
 .nav a[data-nav="clientes"] {
   order: 4;
 }
-.nav a[data-nav="contratos"] {
+.nav a[data-nav="projetos"] {
   order: 5;
 }
-.nav a[data-nav="financeiro"] {
+.nav a[data-nav="contratos"] {
   order: 6;
 }
-.nav a[data-nav="portfolio"] {
+.nav a[data-nav="financeiro"] {
   order: 7;
 }
-.nav a[data-nav="membros"] {
+.nav a[data-nav="portfolio"] {
   order: 8;
 }
-.nav a[data-nav="configuracoes"] {
+.nav a[data-nav="membros"] {
   order: 9;
 }
-.nav a[data-nav="projetos"] {
+.nav a[data-nav="configuracoes"] {
   order: 10;
 }
 .nav a[data-nav="tarefas"] {
