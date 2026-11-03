@@ -361,16 +361,37 @@ select option {
   flex-direction: column;
   gap: 3px;
 }
-.nav a[data-nav="portfolio"] {
-  order: 8;
+.nav a[data-nav="visao-geral"] {
+  order: 1;
 }
-.nav a[data-nav="tarefas"] {
-  order: 9;
+.nav a[data-nav="mensagens"] {
+  order: 2;
+}
+.nav a[data-nav="fila"] {
+  order: 3;
+}
+.nav a[data-nav="clientes"] {
+  order: 4;
+}
+.nav a[data-nav="contratos"] {
+  order: 5;
+}
+.nav a[data-nav="financeiro"] {
+  order: 6;
+}
+.nav a[data-nav="portfolio"] {
+  order: 7;
 }
 .nav a[data-nav="membros"] {
-  order: 10;
+  order: 8;
 }
 .nav a[data-nav="configuracoes"] {
+  order: 9;
+}
+.nav a[data-nav="projetos"] {
+  order: 10;
+}
+.nav a[data-nav="tarefas"] {
   order: 11;
 }
 .nav a {
