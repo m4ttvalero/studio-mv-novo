@@ -27,4 +27,4 @@ A Cloudflare Pages publica a pasta na raiz do repositório a cada `git push` na 
 ## Limites conhecidos
 - Listas carregam até 1.000 registros (limite padrão do Supabase). Para mais, será preciso paginar.
 - A galeria de fotos do portfólio ainda não existe: cada projeto tem uma imagem de capa.
-- Os pagamentos são registrados manualmente. Nada é marcado como recebido automaticamente.
+- Recebimentos e pagamentos de despesas são registrados manualmente. Salvar uma despesa não a marca como paga; use **Registrar pagamento** para informar o valor total ou parcial, data, forma de pagamento e observações.

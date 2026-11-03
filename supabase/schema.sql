@@ -284,17 +284,12 @@ create table if not exists public.expenses (
   category text not null check (category in ('Ferramentas','Plataformas','Domínios','Marketing','Operacional','Outros')),
   amount numeric(12,2) not null check (amount > 0),
   spent_on date not null default current_date,
-  payment_method text check (payment_method is null or payment_method in ('Pix','Dinheiro','Transferência','Cartão','Outra')),
   recurrence text not null default 'Nenhuma' check (recurrence in ('Nenhuma','Mensal','Anual')),
   receipt_path text,
   notes text,
-  payment_tracking boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
-alter table public.expenses
-  add column if not exists payment_tracking boolean not null default false;
 
 create table if not exists public.expense_payments (
   id uuid primary key default gen_random_uuid(),
@@ -305,13 +300,6 @@ create table if not exists public.expense_payments (
   notes text,
   created_at timestamptz not null default now()
 );
-
-insert into public.expense_payments (expense_id, amount, paid_on, method, notes)
-select id, amount, spent_on, payment_method, notes
-from public.expenses
-where not payment_tracking;
-
-update public.expenses set payment_tracking = true where not payment_tracking;
 
 -- ===================================================================
 -- 8. PORTFÓLIO E CONFIGURAÇÕES PÚBLICAS
@@ -375,6 +363,27 @@ create table if not exists public.activity_log (
   label text,
   created_at timestamptz not null default now()
 );
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'expenses'
+      and column_name = 'payment_tracking'
+  ) then
+    delete from public.expense_payments p
+    using public.expenses e
+    where e.id = p.expense_id
+      and e.payment_tracking
+      and not exists (
+        select 1 from public.activity_log a
+        where a.table_name = 'expense_payments'
+          and a.record_id = p.id
+      );
+  end if;
+end;
+$$;
 
 do $$
 begin
