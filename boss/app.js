@@ -994,12 +994,15 @@ function notFound(main, what) {
   main.innerHTML = `<div class="notice bad">${esc(what)} não encontrado. Ele pode ter sido removido.</div>`;
 }
 
-function table(cols, rows, actionsFn) {
+function table(cols, rows, actionsFn, className = "") {
   if (!rows.length)
     return '<div class="empty">Nenhum registro encontrado.</div>';
-  return `<div class="table-wrap"><table>
+  const classAttr = className ? ` class="${className}"` : "";
+  const labelAttr = (label) =>
+    className ? ` data-label="${esc(label)}"` : "";
+  return `<div class="table-wrap${className ? ` ${className}` : ""}"><table${classAttr}>
     <thead><tr>${cols.map((c) => `<th>${c.l}</th>`).join("")}<th class="actions-col"></th></tr></thead>
-    <tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td>${c.f(r)}</td>`).join("")}<td class="actions-col">${actionsFn ? actionsFn(r) : ""}</td></tr>`).join("")}</tbody>
+    <tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td${labelAttr(c.l)}>${c.f(r)}</td>`).join("")}<td class="actions-col"${labelAttr("Ações")}>${actionsFn ? actionsFn(r) : ""}</td></tr>`).join("")}</tbody>
   </table></div>`;
 }
 
@@ -3021,10 +3024,11 @@ function financeExpenses(main) {
       rows,
       (
         r,
-      ) => `${r.remaining > 0.005 ? `<button class="btn-primary sm" data-act="exp-pay" data-id="${r.id}">Registrar pagamento</button> ` : ""}
+      ) => `<div class="expense-actions">${r.remaining > 0.005 ? `<button class="btn-primary sm" data-act="exp-pay" data-id="${r.id}">Registrar pagamento</button>` : ""}
       <button class="ghost sm" data-act="exp-hist" data-id="${r.id}">Pagamentos</button>
       <button class="ghost sm" data-act="exp-edit" data-id="${r.id}">Editar</button>
-      <button class="danger sm" data-act="exp-del" data-id="${r.id}">Excluir</button>`,
+      <button class="danger sm" data-act="exp-del" data-id="${r.id}">Excluir</button></div>`,
+      "expenses-table",
     );
   };
   INP["exp-q"] = (v) => {
