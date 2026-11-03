@@ -994,15 +994,12 @@ function notFound(main, what) {
   main.innerHTML = `<div class="notice bad">${esc(what)} não encontrado. Ele pode ter sido removido.</div>`;
 }
 
-function table(cols, rows, actionsFn, className = "") {
+function table(cols, rows, actionsFn) {
   if (!rows.length)
     return '<div class="empty">Nenhum registro encontrado.</div>';
-  const classAttr = className ? ` class="${className}"` : "";
-  const labelAttr = (label) =>
-    className ? ` data-label="${esc(label)}"` : "";
-  return `<div class="table-wrap${className ? ` ${className}` : ""}"><table${classAttr}>
+  return `<div class="table-wrap"><table>
     <thead><tr>${cols.map((c) => `<th>${c.l}</th>`).join("")}<th class="actions-col"></th></tr></thead>
-    <tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td${labelAttr(c.l)}>${c.f(r)}</td>`).join("")}<td class="actions-col"${labelAttr("Ações")}>${actionsFn ? actionsFn(r) : ""}</td></tr>`).join("")}</tbody>
+    <tbody>${rows.map((r) => `<tr>${cols.map((c) => `<td>${c.f(r)}</td>`).join("")}<td class="actions-col">${actionsFn ? actionsFn(r) : ""}</td></tr>`).join("")}</tbody>
   </table></div>`;
 }
 
@@ -3006,29 +3003,28 @@ function financeExpenses(main) {
     $("#list", main).innerHTML = table(
       [
         { l: "Data", f: (r) => fmtDate(r.spent_on) },
-        { l: "Descrição", f: (r) => esc(r.description) },
+        {
+          l: "Descrição",
+          f: (r) =>
+            esc(r.description) +
+            (r.recurrence && r.recurrence !== "Nenhuma"
+              ? ` <span class="badge info">${esc(r.recurrence)}</span>`
+              : ""),
+        },
         { l: "Categoria", f: (r) => esc(r.category) },
         { l: "Valor", f: (r) => `<span class="money">${brl(r.amount)}</span>` },
         { l: "Pago", f: (r) => `<span class="money">${brl(r.paid)}</span>` },
         { l: "Saldo", f: (r) => `<span class="money">${brl(r.remaining)}</span>` },
         { l: "Situação", f: (r) => badge(r.status) },
-        { l: "Recorrência", f: (r) => esc(r.recurrence) },
-        {
-          l: "Comprovante",
-          f: (r) =>
-            r.receipt_path
-              ? `<button class="ghost sm" data-act="file-open" data-bucket="expense-receipts" data-path="${esc(r.receipt_path)}">Abrir</button>`
-              : '<span class="muted small">—</span>',
-        },
       ],
       rows,
       (
         r,
-      ) => `<div class="expense-actions">${r.remaining > 0.005 ? `<button class="btn-primary sm" data-act="exp-pay" data-id="${r.id}">Registrar pagamento</button>` : ""}
+      ) => `${r.remaining > 0.005 ? `<button class="btn-primary sm" data-act="exp-pay" data-id="${r.id}">Registrar pagamento</button> ` : ""}
       <button class="ghost sm" data-act="exp-hist" data-id="${r.id}">Pagamentos</button>
       <button class="ghost sm" data-act="exp-edit" data-id="${r.id}">Editar</button>
-      <button class="danger sm" data-act="exp-del" data-id="${r.id}">Excluir</button></div>`,
-      "expenses-table",
+      ${r.receipt_path ? `<button class="ghost sm" data-act="file-open" data-bucket="expense-receipts" data-path="${esc(r.receipt_path)}">Comprovante</button> ` : ""}
+      <button class="danger sm" data-act="exp-del" data-id="${r.id}">Excluir</button>`,
     );
   };
   INP["exp-q"] = (v) => {
