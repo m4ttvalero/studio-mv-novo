@@ -288,9 +288,30 @@ create table if not exists public.expenses (
   recurrence text not null default 'Nenhuma' check (recurrence in ('Nenhuma','Mensal','Anual')),
   receipt_path text,
   notes text,
+  payment_tracking boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.expenses
+  add column if not exists payment_tracking boolean not null default false;
+
+create table if not exists public.expense_payments (
+  id uuid primary key default gen_random_uuid(),
+  expense_id uuid not null references public.expenses(id) on delete cascade,
+  amount numeric(12,2) not null check (amount > 0),
+  paid_on date not null default current_date,
+  method text check (method is null or method in ('Pix','Dinheiro','Transferência','Cartão','Outra')),
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+insert into public.expense_payments (expense_id, amount, paid_on, method, notes)
+select id, amount, spent_on, payment_method, notes
+from public.expenses
+where not payment_tracking;
+
+update public.expenses set payment_tracking = true where not payment_tracking;
 
 -- ===================================================================
 -- 8. PORTFÓLIO E CONFIGURAÇÕES PÚBLICAS
@@ -327,6 +348,7 @@ begin
   foreach v_table in array array[
     'clients', 'projects', 'project_stages', 'waitlist', 'messages',
     'contracts', 'contract_files', 'receivables', 'payments', 'expenses',
+    'expense_payments',
     'portfolio', 'members', 'settings', 'member_tasks'
   ]
   loop
@@ -409,6 +431,46 @@ begin
     where receivable_id = new.receivable_id and id <> new.id;
   if already + new.amount > total then
     raise exception 'O pagamento ultrapassa o saldo restante desta cobrança.';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.check_expense_payment_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  total numeric;
+  already numeric;
+begin
+  select amount into total from public.expenses where id = new.expense_id;
+  select coalesce(sum(amount), 0) into already
+    from public.expense_payments
+    where expense_id = new.expense_id and id <> new.id;
+  if already + new.amount > total then
+    raise exception 'O pagamento ultrapassa o saldo restante desta despesa.';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.check_expense_amount_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  already numeric;
+begin
+  select coalesce(sum(amount), 0) into already
+    from public.expense_payments
+    where expense_id = new.id;
+  if already > new.amount then
+    raise exception 'O valor da despesa não pode ser menor que o total já pago.';
   end if;
   return new;
 end;
@@ -569,6 +631,14 @@ drop trigger if exists payments_limit on public.payments;
 create trigger payments_limit before insert or update on public.payments
   for each row execute function public.check_payment_limit();
 
+drop trigger if exists expense_payments_limit on public.expense_payments;
+create trigger expense_payments_limit before insert or update on public.expense_payments
+  for each row execute function public.check_expense_payment_limit();
+
+drop trigger if exists expenses_payment_limit on public.expenses;
+create trigger expenses_payment_limit before update of amount on public.expenses
+  for each row execute function public.check_expense_amount_limit();
+
 drop trigger if exists log_clients on public.clients;
 create trigger log_clients after insert or update or delete on public.clients
   for each row execute function public.log_activity();
@@ -609,6 +679,10 @@ drop trigger if exists log_expenses on public.expenses;
 create trigger log_expenses after insert or update or delete on public.expenses
   for each row execute function public.log_activity();
 
+drop trigger if exists log_expense_payments on public.expense_payments;
+create trigger log_expense_payments after insert or update or delete on public.expense_payments
+  for each row execute function public.log_activity();
+
 drop trigger if exists log_portfolio on public.portfolio;
 create trigger log_portfolio after insert or update or delete on public.portfolio
   for each row execute function public.log_activity();
@@ -639,6 +713,7 @@ alter table public.contract_files enable row level security;
 alter table public.receivables enable row level security;
 alter table public.payments enable row level security;
 alter table public.expenses enable row level security;
+alter table public.expense_payments enable row level security;
 alter table public.portfolio enable row level security;
 alter table public.settings enable row level security;
 alter table public.activity_log enable row level security;
@@ -759,6 +834,18 @@ create policy "membro lê despesas" on public.expenses
   for select to authenticated using (public.has_module_access('finance', 'read'));
 drop policy if exists "membro edita despesas" on public.expenses;
 create policy "membro edita despesas" on public.expenses
+  for all to authenticated using (public.has_module_access('finance', 'write'))
+  with check (public.has_module_access('finance', 'write'));
+
+drop policy if exists "admin total pagamentos de despesas" on public.expense_payments;
+create policy "admin total pagamentos de despesas" on public.expense_payments
+  for all to authenticated using (public.is_admin()) with check (public.is_admin());
+
+drop policy if exists "membro lê pagamentos de despesas" on public.expense_payments;
+create policy "membro lê pagamentos de despesas" on public.expense_payments
+  for select to authenticated using (public.has_module_access('finance', 'read'));
+drop policy if exists "membro edita pagamentos de despesas" on public.expense_payments;
+create policy "membro edita pagamentos de despesas" on public.expense_payments
   for all to authenticated using (public.has_module_access('finance', 'write'))
   with check (public.has_module_access('finance', 'write'));
 

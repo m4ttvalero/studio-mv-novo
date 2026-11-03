@@ -65,6 +65,7 @@ const TABLE_LABEL = {
   receivables: "Cobrança",
   payments: "Pagamento",
   expenses: "Despesa",
+  expense_payments: "Pagamento de despesa",
   portfolio: "Portfólio",
 };
 const ACTION_LABEL = {
@@ -75,7 +76,12 @@ const ACTION_LABEL = {
 
 /* Cache dos dados de apoio (clientes, projetos, contratos) e financeiro */
 const DB = { clients: [], projects: [], contracts: [] };
-let FIN = { receivables: [], payments: [], expenses: [] };
+let FIN = {
+  receivables: [],
+  payments: [],
+  expenses: [],
+  expensePayments: [],
+};
 let MEMBER_CONTEXT = { isAdmin: false, profile: null };
 let NOTIFICATIONS = [];
 let NOTIFICATION_CHANNEL = null;
@@ -543,6 +549,7 @@ function startRealtimeNotifications(userId) {
     ["receivables", "finance", false],
     ["payments", "finance", false],
     ["expenses", "finance", false],
+    ["expense_payments", "finance", false],
     ["portfolio", "portfolio", false],
     ["members", null, true],
     ["settings", null, true],
@@ -833,15 +840,26 @@ async function loadRefs() {
 
 async function loadFinance() {
   if (!hasModuleAccess("finance")) {
-    FIN = { receivables: [], payments: [], expenses: [] };
+    FIN = {
+      receivables: [],
+      payments: [],
+      expenses: [],
+      expensePayments: [],
+    };
     return;
   }
-  const [rec, pay, exp] = await Promise.all([
+  const [rec, pay, exp, expPay] = await Promise.all([
     q(
       sb.from("receivables").select("*").order("due_date", { ascending: true }),
     ),
     q(sb.from("payments").select("*").order("paid_on", { ascending: false })),
     q(sb.from("expenses").select("*").order("spent_on", { ascending: false })),
+    q(
+      sb
+        .from("expense_payments")
+        .select("*")
+        .order("paid_on", { ascending: false }),
+    ),
   ]);
   const paid = {};
   for (const p of pay)
@@ -859,7 +877,22 @@ async function loadFinance() {
             ? "Parcial"
             : "A receber";
   }
-  FIN = { receivables: rec, payments: pay, expenses: exp };
+  const expensePaid = {};
+  for (const p of expPay)
+    expensePaid[p.expense_id] =
+      (expensePaid[p.expense_id] || 0) + Number(p.amount);
+  for (const e of exp) {
+    e.paid = expensePaid[e.id] || 0;
+    e.remaining = Math.max(0, Number(e.amount) - e.paid);
+    e.status =
+      e.remaining < 0.005 ? "Pago" : e.paid > 0 ? "Parcial" : "Pendente";
+  }
+  FIN = {
+    receivables: rec,
+    payments: pay,
+    expenses: exp,
+    expensePayments: expPay,
+  };
 }
 
 /* Meses (AAAA-MM) desde o início da manutenção até o mês atual, com o dia de vencimento. */
@@ -935,11 +968,11 @@ function contractFin(c) {
 /* ===================== Componentes de interface ===================== */
 function badge(s) {
   const cls =
-    /Recebido|Ativo|Concluíd[oa]|Entregue|Publicado|Convertida|Movido/.test(s)
+    /Recebido|Pago|Ativo|Concluíd[oa]|Entregue|Publicado|Convertida|Movido/.test(s)
       ? "ok"
       : /Vencido|Cancelado|Arquivada/.test(s)
         ? "bad"
-        : /Parcial|A receber|Aguardando|Nova|Em /.test(s)
+        : /Parcial|Pendente|A receber|Aguardando|Nova|Em /.test(s)
           ? "warn"
           : "";
   return `<span class="badge ${cls}">${esc(s)}</span>`;
@@ -1585,10 +1618,10 @@ function overviewChartPoints(period, now = new Date()) {
     totals.received += Number(payment.amount);
     dailyTotals.set(payment.paid_on, totals);
   });
-  FIN.expenses.forEach((expense) => {
-    const totals = dailyTotals.get(expense.spent_on) || { received: 0, expenses: 0 };
-    totals.expenses += Number(expense.amount);
-    dailyTotals.set(expense.spent_on, totals);
+  FIN.expensePayments.forEach((payment) => {
+    const totals = dailyTotals.get(payment.paid_on) || { received: 0, expenses: 0 };
+    totals.expenses += Number(payment.amount);
+    dailyTotals.set(payment.paid_on, totals);
   });
 
   const buckets = new Map();
@@ -1642,10 +1675,14 @@ async function viewOverview(main) {
     FIN.payments.filter((p) => p.paid_on.startsWith(yr)).map((p) => p.amount),
   );
   const expMonth = sum(
-    FIN.expenses.filter((e) => e.spent_on.startsWith(ym)).map((e) => e.amount),
+    FIN.expensePayments
+      .filter((p) => p.paid_on.startsWith(ym))
+      .map((p) => p.amount),
   );
   const expYear = sum(
-    FIN.expenses.filter((e) => e.spent_on.startsWith(yr)).map((e) => e.amount),
+    FIN.expensePayments
+      .filter((p) => p.paid_on.startsWith(yr))
+      .map((p) => p.amount),
   );
   const pending = sum(FIN.receivables.map((r) => r.remaining));
   const late = FIN.receivables.filter(
@@ -2667,13 +2704,6 @@ const EXPENSE_FIELDS = [
   { k: "amount", l: "Valor (R$)", t: "money", req: 1 },
   { k: "spent_on", l: "Data", t: "date", req: 1, def: isoToday() },
   {
-    k: "payment_method",
-    l: "Forma de pagamento",
-    t: "select",
-    opts: PAY,
-    empty: "—",
-  },
-  {
     k: "recurrence",
     l: "Recorrência",
     t: "select",
@@ -2704,6 +2734,10 @@ function expenseForm(e) {
     async (out, close) => {
       const file = out.receipt;
       delete out.receipt;
+      if (e && out.amount < e.paid - 0.005)
+        throw new Error(
+          `O valor não pode ser menor que o já pago (${brl(e.paid)}).`,
+        );
       const saved = await saveEntity("expenses", out, e && e.id);
       if (file) {
         const path = `${saved.id}/${Date.now()}-${safeName(file.name)}`;
@@ -2724,6 +2758,55 @@ function expenseForm(e) {
   );
 }
 
+function expensePaymentForm(expense) {
+  formModal(
+    "Registrar pagamento",
+    [
+      {
+        k: "amount",
+        l: `Valor pago · saldo ${brl(expense.remaining)}`,
+        t: "money",
+        req: 1,
+      },
+      {
+        k: "paid_on",
+        l: "Data do pagamento",
+        t: "date",
+        req: 1,
+        def: isoToday(),
+      },
+      {
+        k: "method",
+        l: "Forma de pagamento",
+        t: "select",
+        opts: PAY,
+        req: 1,
+        def: "Pix",
+      },
+      { k: "notes", l: "Observações", t: "textarea", full: 1 },
+    ],
+    { amount: expense.remaining.toFixed(2).replace(".", ",") },
+    async (out, close) => {
+      if (out.amount > expense.remaining + 0.005)
+        throw new Error(`O valor excede o saldo de ${brl(expense.remaining)}.`);
+      await saveEntity(
+        "expense_payments",
+        {
+          expense_id: expense.id,
+          amount: out.amount,
+          paid_on: out.paid_on,
+          method: out.method,
+          notes: out.notes,
+        },
+        null,
+      );
+      close();
+      toast("Pagamento da despesa registrado.");
+      await route();
+    },
+  );
+}
+
 function reportData(de, ate, cli, proj) {
   const inR = (d) => d && d >= de && d <= ate;
   const byId = Object.fromEntries(FIN.receivables.map((r) => [r.id, r]));
@@ -2734,7 +2817,7 @@ function reportData(de, ate, cli, proj) {
     (p) =>
       inR(p.paid_on) && byId[p.receivable_id] && okR(byId[p.receivable_id]),
   );
-  const exps = FIN.expenses.filter((e) => inR(e.spent_on));
+  const exps = FIN.expensePayments.filter((p) => inR(p.paid_on));
   const recebido = sum(pays.map((p) => p.amount));
   const despesas = sum(exps.map((e) => e.amount));
   return {
@@ -2742,6 +2825,7 @@ function reportData(de, ate, cli, proj) {
     pays,
     exps,
     byId,
+    byExpense: Object.fromEntries(FIN.expenses.map((e) => [e.id, e])),
     contratado: sum(recs.map((r) => r.amount)),
     recebido,
     pendente: sum(recs.map((r) => r.remaining)),
@@ -2774,17 +2858,20 @@ function buildCSV(d) {
       "",
       p.method,
     ]),
-    ...d.exps.map((e) => [
-      "Despesa",
-      fmtDate(e.spent_on),
-      e.category,
-      e.description,
-      numCSV(e.amount),
-      "",
-      "",
-      "",
-      e.payment_method || "",
-    ]),
+    ...d.exps.map((p) => {
+      const e = d.byExpense[p.expense_id] || {};
+      return [
+        "Despesa",
+        fmtDate(p.paid_on),
+        e.category,
+        e.description,
+        numCSV(p.amount),
+        "",
+        "",
+        "",
+        p.method || "",
+      ];
+    }),
   ];
   const head = [
     "Tipo",
@@ -2919,6 +3006,9 @@ function financeExpenses(main) {
         { l: "Descrição", f: (r) => esc(r.description) },
         { l: "Categoria", f: (r) => esc(r.category) },
         { l: "Valor", f: (r) => `<span class="money">${brl(r.amount)}</span>` },
+        { l: "Pago", f: (r) => `<span class="money">${brl(r.paid)}</span>` },
+        { l: "Saldo", f: (r) => `<span class="money">${brl(r.remaining)}</span>` },
+        { l: "Situação", f: (r) => badge(r.status) },
         { l: "Recorrência", f: (r) => esc(r.recurrence) },
         {
           l: "Comprovante",
@@ -2931,7 +3021,9 @@ function financeExpenses(main) {
       rows,
       (
         r,
-      ) => `<button class="ghost sm" data-act="exp-edit" data-id="${r.id}">Editar</button>
+      ) => `${r.remaining > 0.005 ? `<button class="btn-primary sm" data-act="exp-pay" data-id="${r.id}">Registrar pagamento</button> ` : ""}
+      <button class="ghost sm" data-act="exp-hist" data-id="${r.id}">Pagamentos</button>
+      <button class="ghost sm" data-act="exp-edit" data-id="${r.id}">Editar</button>
       <button class="danger sm" data-act="exp-del" data-id="${r.id}">Excluir</button>`,
     );
   };
@@ -3869,6 +3961,44 @@ GACT["rec-hist"] = (id) => {
 GACT["exp-new"] = () => expenseForm();
 GACT["exp-edit"] = (id) => expenseForm(FIN.expenses.find((x) => x.id === id));
 GACT["exp-del"] = (id) => removeRecord("expenses", id, "Excluir esta despesa?");
+GACT["exp-pay"] = (id) =>
+  expensePaymentForm(FIN.expenses.find((expense) => expense.id === id));
+GACT["exp-hist"] = (id) => {
+  const expense = FIN.expenses.find((item) => item.id === id);
+  const list = FIN.expensePayments.filter((payment) => payment.expense_id === id);
+  openModal(
+    `Pagamentos · ${expense.description}`,
+    list.length
+      ? `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Forma</th><th>Valor</th><th></th></tr></thead><tbody>
+        ${list
+          .map(
+            (payment) => `<tr><td>${fmtDate(payment.paid_on)}</td><td>${esc(payment.method || "—")}</td><td class="money">${brl(payment.amount)}</td>
+          ${hasModuleAccess("finance", "write") ? `<td class="actions-col"><button class="danger sm" type="button" data-exp-pay-del="${payment.id}">Excluir</button></td>` : ""}</tr>`,
+          )
+          .join("")}
+        </tbody></table></div>`
+      : '<p class="muted">Nenhum pagamento registrado.</p>',
+    (wrap) => {
+      wrap.addEventListener("click", async (event) => {
+        const button = event.target.closest("[data-exp-pay-del]");
+        if (!button) return;
+        if (!confirm("Excluir este pagamento da despesa?")) return;
+        try {
+          const { error } = await sb
+            .from("expense_payments")
+            .delete()
+            .eq("id", button.dataset.expPayDel);
+          if (error) throw error;
+          toast("Pagamento da despesa excluído.");
+          wrap.remove();
+          await route();
+        } catch (error) {
+          toast(friendly(error), false);
+        }
+      });
+    },
+  );
+};
 
 GACT["msg-open"] = (id) => {
   q(sb.from("messages").select("*").eq("id", id).single())
